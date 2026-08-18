@@ -9,7 +9,13 @@ from .models import Membership
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def me(request):
-    return Response(MeSerializer(request.user).data)
+    user = (
+        request.user.__class__.objects
+        .filter(pk=request.user.pk)
+        .prefetch_related("memberships__company")
+        .get()
+    )
+    return Response(MeSerializer(user).data)
 
 
 @api_view(["GET"])
@@ -18,6 +24,24 @@ def my_roles(request):
     memberships = (
         Membership.objects
         .filter(user=request.user, is_active=True)
-        .values("company_id", "role")
+        .values(
+            "company_id",
+            "company__slug",
+            "company__trade_name",
+            "company__legal_name",
+            "role",
+        )
     )
-    return Response({"roles": list(memberships)})
+
+    roles = [
+        {
+            "company_id": m["company_id"],
+            "company_slug": m["company__slug"],
+            "company_trade_name": m["company__trade_name"],
+            "company_legal_name": m["company__legal_name"],
+            "role": m["role"],
+        }
+        for m in memberships
+    ]
+
+    return Response({"roles": roles})

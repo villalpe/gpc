@@ -1,6 +1,8 @@
 from django.contrib import admin
 from django.urls import path
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from accounts.views_permissions import my_permissions
+from django.urls import path, include
 
 from core.views import (
     health_check,
@@ -19,6 +21,9 @@ urlpatterns = [
 
     path("api/me/", me, name="me"),
     path("api/me/roles/", my_roles, name="my_roles"),
+    path("api/me/permissions/", my_permissions, name="my_permissions"),
+
+    path("api/audit/", include("audit.urls")),
 
     path("api/admin/ping/", admin_ping, name="admin_ping"),
     path("api/company/ping/", company_scope_ping, name="company_scope_ping"),
