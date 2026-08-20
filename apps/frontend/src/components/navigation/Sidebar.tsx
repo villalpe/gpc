@@ -6,7 +6,7 @@ import { Can } from "@/components/authz/Can";
 export function Sidebar() {
   return (
     <nav>
-      <li style={{ color: "red" }}>DEBUG SIDEBAR NUEVO NUEVO</li>
+      <li style={{ color: "red" }}>DEBUG SIDEBAR NUEVO NUEVO NUEVO</li>
       <ul>
         <Can do="inventory.read">
           <li><Link href="/inventory">Inventario</Link></li>
