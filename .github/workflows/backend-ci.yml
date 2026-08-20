@@ -63,6 +63,10 @@ jobs:
         working-directory: apps/backend
         run: python manage.py migrate --noinput
 
+      - name: Run lint (ruff)
+        working-directory: apps/backend
+        run: ruff check .        
+
       - name: Run tests
         working-directory: apps/backend
         run: |
