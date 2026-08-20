@@ -3,7 +3,9 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.permissions import IsSuperAdmin, CanAccessAudit, CanAccessInventory
-from core.company_context import require_company_membership
+from accounts.permission_service import has_feature_permission
+from core.company_context import require_company_membership, get_active_company_id
+from audit.services import log_event  # <- agregar
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
@@ -29,4 +31,45 @@ def audit_module_ping(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, CanAccessInventory])
 def inventory_module_ping(request):
-    return Response({"ok": True, "module": "inventory"})    
+    return Response({"ok": True, "module": "inventory"})
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def inventory_adjust(request):
+    company_id = get_active_company_id(request)
+    sku = request.data.get("sku")
+    delta = request.data.get("delta")
+
+    try:
+        if not has_feature_permission(request.user, company_id, "inventory.adjust"):
+            log_event(
+                request=request,
+                action="inventory.adjust",
+                status="forbidden",
+                message="Permission denied",
+                company_id=company_id,
+                metadata={"sku": sku, "delta": delta},
+            )
+            return Response({"detail": "Forbidden"}, status=403)
+
+        # Ajuste (dummy en esta etapa)
+        log_event(
+            request=request,
+            action="inventory.adjust",
+            status="success",
+            message="Inventory adjusted",
+            company_id=company_id,
+            metadata={"sku": sku, "delta": delta},
+        )
+        return Response({"ok": True, "sku": sku, "delta": delta}, status=200)
+
+    except Exception as ex:
+        log_event(
+            request=request,
+            action="inventory.adjust",
+            status="error",
+            message=str(ex)[:300],
+            company_id=company_id,
+            metadata={"sku": sku, "delta": delta},
+        )
+        return Response({"detail": "Internal error"}, status=500)

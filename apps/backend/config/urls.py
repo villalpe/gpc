@@ -10,6 +10,7 @@ from core.views import (
     company_scope_ping,
     audit_module_ping,
     inventory_module_ping,
+    inventory_adjust,   
 )
 from accounts.views import me, my_roles
 
@@ -29,4 +30,5 @@ urlpatterns = [
     path("api/company/ping/", company_scope_ping, name="company_scope_ping"),
     path("api/modules/audit/ping/", audit_module_ping, name="audit_module_ping"),
     path("api/modules/inventory/ping/", inventory_module_ping, name="inventory_module_ping"),
+    path("api/modules/inventory/adjust/", inventory_adjust, name="inventory_adjust"),
 ]
