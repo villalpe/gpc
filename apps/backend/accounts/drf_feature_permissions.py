@@ -1,5 +1,7 @@
 from rest_framework.permissions import BasePermission
+
 from .permission_service import has_feature_permission
+
 
 class HasFeaturePermission(BasePermission):
     required_permission = None  # override en subclasses

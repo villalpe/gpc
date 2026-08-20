@@ -1,18 +1,17 @@
 from django.contrib import admin
-from django.urls import path
+from django.urls import include, path
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from accounts.views_permissions import my_permissions
-from django.urls import path, include
 
-from core.views import (
-    health_check,
-    admin_ping,
-    company_scope_ping,
-    audit_module_ping,
-    inventory_module_ping,
-    inventory_adjust,   
-)
 from accounts.views import me, my_roles
+from accounts.views_permissions import my_permissions
+from core.views import (
+    admin_ping,
+    audit_module_ping,
+    company_scope_ping,
+    health_check,
+    inventory_adjust,
+    inventory_module_ping,
+)
 
 urlpatterns = [
     path("admin/", admin.site.urls),

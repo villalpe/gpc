@@ -1,9 +1,7 @@
-import uuid
-from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from accounts.models import User, Membership, Role
+from accounts.models import Membership, Role, User
 from companies.models import Company
 
 

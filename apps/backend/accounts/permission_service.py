@@ -1,6 +1,8 @@
 from typing import Optional
+
 from .models import Membership
 from .permissions_matrix import ROLE_PERMISSIONS
+
 
 def get_user_role_in_company(user, company_id) -> Optional[str]:
     membership = (

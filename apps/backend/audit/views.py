@@ -3,9 +3,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from audit.models import AuditEvent
 from accounts.permission_service import get_user_role_in_company
-
+from audit.models import AuditEvent
 
 ALLOWED_ROLES = {"SUPERADMIN", "ADMIN_COMPANY"}
 
