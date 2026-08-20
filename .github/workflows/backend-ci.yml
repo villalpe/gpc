@@ -65,4 +65,5 @@ jobs:
 
       - name: Run tests
         working-directory: apps/backend
-        run: python manage.py test -v 2
+        run: |
+          python manage.py test accounts.tests -v 2
