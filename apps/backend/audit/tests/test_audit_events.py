@@ -1,10 +1,10 @@
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
-from django.contrib.auth import get_user_model
 
-from companies.models import Company
 from accounts.models import Membership, Role
 from audit.models import AuditEvent
+from companies.models import Company
 
 
 class AuditEventsTests(TestCase):

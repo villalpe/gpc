@@ -2,10 +2,11 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from accounts.permissions import IsSuperAdmin, CanAccessAudit, CanAccessInventory
 from accounts.permission_service import has_feature_permission
-from core.company_context import require_company_membership, get_active_company_id
+from accounts.permissions import CanAccessAudit, CanAccessInventory, IsSuperAdmin
 from audit.services import log_event  # <- agregar
+from core.company_context import get_active_company_id, require_company_membership
+
 
 @api_view(["GET"])
 @permission_classes([AllowAny])

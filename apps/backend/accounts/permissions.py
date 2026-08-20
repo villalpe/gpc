@@ -1,6 +1,8 @@
 from rest_framework.permissions import BasePermission
-from .models import Membership, Role
+
 from core.company_context import get_active_company_id
+
+from .models import Membership, Role
 
 MODULE_ROLE_MATRIX = {
     "audit": {Role.SUPERADMIN, Role.ADMIN_COMPANY, Role.VIEWER},

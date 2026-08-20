@@ -1,4 +1,5 @@
 from django.urls import path
+
 from .views import audit_events_list
 
 urlpatterns = [

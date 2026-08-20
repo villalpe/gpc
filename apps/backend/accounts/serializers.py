@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import User, Membership
+
+from .models import Membership, User
 
 
 class MembershipSerializer(serializers.ModelSerializer):

@@ -1,10 +1,10 @@
-from django.urls import reverse
-from rest_framework.test import APITestCase
-from rest_framework import status
 from django.contrib.auth import get_user_model
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
 
-from companies.models import Company
 from accounts.models import Membership, Role
+from companies.models import Company
 
 
 class AuthRolesTests(APITestCase):

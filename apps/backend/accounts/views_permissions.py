@@ -1,8 +1,10 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from .permission_service import list_permissions_for_user_company
+
 from audit.services import log_event
+
+from .permission_service import list_permissions_for_user_company
 
 
 @api_view(["GET"])
