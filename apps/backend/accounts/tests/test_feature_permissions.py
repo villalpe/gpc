@@ -1,9 +1,7 @@
-import uuid
-from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from accounts.models import User, Membership, Role
+from accounts.models import Membership, Role, User
 from companies.models import Company
 
 
@@ -23,10 +21,30 @@ class FeaturePermissionsAPITests(APITestCase):
         self.u_operator = User.objects.create_user(email="operator@gpc.com", password=self.password)
         self.u_viewer = User.objects.create_user(email="viewer@gpc.com", password=self.password)
 
-        Membership.objects.create(user=self.u_super, company=self.company, role=Role.SUPERADMIN, is_active=True)
-        Membership.objects.create(user=self.u_admin, company=self.company, role=Role.ADMIN_COMPANY, is_active=True)
-        Membership.objects.create(user=self.u_operator, company=self.company, role=Role.OPERATOR, is_active=True)
-        Membership.objects.create(user=self.u_viewer, company=self.company, role=Role.VIEWER, is_active=True)
+        Membership.objects.create(
+            user=self.u_super,
+            company=self.company,
+            role=Role.SUPERADMIN,
+            is_active=True,
+        )   
+        Membership.objects.create(
+            user=self.u_admin,
+            company=self.company,
+            role=Role.ADMIN_COMPANY,
+            is_active=True,
+        )
+        Membership.objects.create(
+            user=self.u_operator,
+            company=self.company,
+            role=Role.OPERATOR,
+            is_active=True,
+        )
+        Membership.objects.create(
+            user=self.u_viewer,
+            company=self.company,
+            role=Role.VIEWER,
+            is_active=True,
+        )
 
     def _auth(self, email, password):
         res = self.client.post(
@@ -106,7 +124,7 @@ class FeaturePermissionsAPITests(APITestCase):
         self.assertIn("detail", res.data)
 
     def test_permissions_no_membership_returns_empty_list(self):
-        outsider = User.objects.create_user(email="outsider@gpc.com", password=self.password)
+        User.objects.create_user(email="outsider@gpc.com", password=self.password)
         self._auth("outsider@gpc.com", self.password)
         res = self._get_permissions(self.company.id)
         self.assertEqual(res.status_code, status.HTTP_200_OK)

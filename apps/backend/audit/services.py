@@ -1,4 +1,5 @@
 from typing import Optional
+
 from .models import AuditEvent
 
 
@@ -18,7 +19,10 @@ def log_event(
     company_id=None,
     metadata: dict | None = None,
 ):
-    user = request.user if getattr(request, "user", None) and request.user.is_authenticated else None
+    user = (request.user 
+        if getattr(request, "user", None) and request.user.is_authenticated
+        else None
+    )
     request_id = getattr(request, "request_id", "") or request.headers.get("X-Request-Id", "")
 
     AuditEvent.objects.create(

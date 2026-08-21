@@ -3,9 +3,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from audit.models import AuditEvent
 from accounts.permission_service import get_user_role_in_company
-
+from audit.models import AuditEvent
 
 ALLOWED_ROLES = {"SUPERADMIN", "ADMIN_COMPANY"}
 
@@ -15,7 +14,10 @@ ALLOWED_ROLES = {"SUPERADMIN", "ADMIN_COMPANY"}
 def audit_events_list(request):
     company_id = request.query_params.get("company_id") or request.headers.get("X-Company-Id")
     if not company_id:
-        return Response({"detail": "company_id query param or X-Company-Id header required"}, status=400)
+        return Response(
+            {"detail": "company_id query param or X-Company-Id header required"},
+            status=400,
+        )
 
     role = get_user_role_in_company(request.user, company_id)
     if role not in ALLOWED_ROLES:
@@ -31,14 +33,20 @@ def audit_events_list(request):
     if dt_from:
         parsed = parse_datetime(dt_from)
         if not parsed:
-            return Response({"detail": "Invalid 'from' datetime format (ISO 8601 required)"}, status=400)
+            return Response(
+                {"detail": "Invalid 'from' datetime format (ISO 8601 required)"},
+                status=400,
+            )
         qs = qs.filter(created_at__gte=parsed)
 
     dt_to = request.query_params.get("to")
     if dt_to:
         parsed = parse_datetime(dt_to)
         if not parsed:
-            return Response({"detail": "Invalid 'to' datetime format (ISO 8601 required)"}, status=400)
+            return Response(
+                {"detail": "Invalid 'to' datetime format (ISO 8601 required)"},
+                status=400,
+        )
         qs = qs.filter(created_at__lte=parsed)
 
     try:

@@ -23,8 +23,18 @@ class AuditEventsListTests(TestCase):
         self.admin = User.objects.create_user(email="admin.audit@gpc.com", password=self.password)
         self.viewer = User.objects.create_user(email="viewer.audit@gpc.com", password=self.password)
 
-        Membership.objects.create(user=self.admin, company=self.company, role=Role.ADMIN_COMPANY, is_active=True)
-        Membership.objects.create(user=self.viewer, company=self.company, role=Role.VIEWER, is_active=True)
+        Membership.objects.create(
+            user=self.admin,
+            company=self.company,
+            role=Role.ADMIN_COMPANY,
+            is_active=True,
+        )
+        Membership.objects.create(
+            user=self.viewer,
+            company=self.company,
+            role=Role.VIEWER,
+            is_active=True,
+        )
 
         AuditEvent.objects.create(
             company_id=self.company.id,
@@ -37,7 +47,11 @@ class AuditEventsListTests(TestCase):
         )
 
     def _login(self, email):
-        res = self.client.post("/api/token/", {"email": email, "password": self.password}, format="json")
+        res = self.client.post(
+            "/api/token/",
+            {"email": email, "password": self.password},
+            format="json",
+        )
         token = res.data["access"]
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
