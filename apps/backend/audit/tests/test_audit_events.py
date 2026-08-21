@@ -19,9 +19,18 @@ class AuditEventsTests(TestCase):
         )
         User = get_user_model()
         self.user = User.objects.create_user(email="audit@gpc.com", password=self.password)
-        Membership.objects.create(user=self.user, company=self.company, role=Role.SUPERADMIN, is_active=True)
+        Membership.objects.create(
+            user=self.user,
+            company=self.company,
+            role=Role.SUPERADMIN,
+            is_active=True,
+        )
 
-        token_res = self.client.post("/api/token/", {"email": "audit@gpc.com", "password": self.password}, format="json")
+        token_res = self.client.post(
+            "/api/token/",
+            {"email": "audit@gpc.com", "password": self.password},
+            format="json",
+        )
         token = token_res.data["access"]
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
