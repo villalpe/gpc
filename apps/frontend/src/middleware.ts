@@ -1,6 +1,6 @@
-import { NextResponse, NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-const PRIVATE_PATHS = ["/dashboard", "/admin"];
+const PRIVATE_PATHS = ["/dashboard", "/admin", "/inventory", "/audit", "/users"];
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -19,5 +19,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/admin/:path*"],
+  matcher: ["/dashboard/:path*", "/admin/:path*", "/inventory/:path*", "/audit/:path*", "/users/:path*"],
 };

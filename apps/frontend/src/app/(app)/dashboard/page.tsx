@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { apiFetch } from "@/lib/apiFetch";
+import { useRouter } from "next/navigation";
+import { apiFetch, ApiError } from "@/lib/apiFetch";
 
 type Membership = {
   company_id: string;
@@ -21,52 +22,70 @@ type PermissionsResponse = {
   permissions: string[];
 };
 
+function setActiveCompanyCookie(companyId: string) {
+  document.cookie = `active_company_id=${encodeURIComponent(companyId)}; Path=/; SameSite=Lax`;
+}
+
 export default function DashboardPage() {
+  const router = useRouter();
+
   const [me, setMe] = useState<MeResponse | null>(null);
   const [activeCompanyId, setActiveCompanyId] = useState<string>("");
-
   const [effectivePermissions, setEffectivePermissions] = useState<string[]>([]);
   const [inventoryAllowed, setInventoryAllowed] = useState<boolean>(false);
 
   useEffect(() => {
     (async () => {
-      const meRes = await apiFetch("/api/me/", { method: "GET" });
-      const meData: MeResponse = await meRes.json();
-      setMe(meData);
+      try {
+        const meRes = await apiFetch("/api/me", { method: "GET" });
+        const meData: MeResponse = await meRes.json();
+        setMe(meData);
 
-      // por defecto, primera empresa
-      const firstCompany = meData.memberships?.[0]?.company_id ?? "";
-      setActiveCompanyId(String(firstCompany));
+        const firstCompany = meData.memberships?.[0]?.company_id ?? "";
+        const companyId = String(firstCompany);
+        setActiveCompanyId(companyId);
+
+        if (companyId) {
+          setActiveCompanyCookie(companyId);
+        }
+      } catch (err: unknown) {
+        if (err instanceof ApiError && err.status === 401) {
+          router.push("/login");
+          return;
+        }
+        console.error("Error cargando /api/me:", err);
+      }
     })();
-  }, []);
+  }, [router]);
 
-    useEffect(() => {
+  useEffect(() => {
     if (!activeCompanyId) return;
 
     (async () => {
-        try {
-        // permisos efectivos
-        const pRes = await apiFetch("/api/me/permissions/", { method: "GET" });
+      try {
+        const pRes = await apiFetch("/api/me/permissions", { method: "GET" });
         const pData: PermissionsResponse = await pRes.json();
         setEffectivePermissions(pData.permissions || []);
 
-        // ping backend inventario (puede dar 403 en viewer)
         try {
-            const invRes = await apiFetch("/api/modules/inventory/ping/", { method: "GET" });
-            setInventoryAllowed(invRes.ok);
-        } catch (e: any) {
-            if (e?.message === "FORBIDDEN") {
+          const invRes = await apiFetch("/api/modules/inventory/ping", { method: "GET" });
+          setInventoryAllowed(invRes.ok);
+        } catch (e: unknown) {
+          if (e instanceof ApiError && e.status === 403) {
             setInventoryAllowed(false);
-            // opcional: NO toast aquí para no molestar al cargar dashboard
-            } else {
+          } else {
             throw e;
-            }
+          }
         }
-        } catch (err) {
+      } catch (err: unknown) {
+        if (err instanceof ApiError && err.status === 401) {
+          router.push("/login");
+          return;
+        }
         console.error("Error cargando dashboard:", err);
-        }
+      }
     })();
-    }, [activeCompanyId]);
+  }, [activeCompanyId, router]);
 
   const activeMembership = useMemo(
     () => me?.memberships?.find((m) => String(m.company_id) === String(activeCompanyId)),
@@ -87,16 +106,15 @@ export default function DashboardPage() {
   const canUsersInvite = effectivePermissions.includes("users.invite");
 
   function onCompanyChange(nextCompanyId: string) {
-    // si tu backend usa endpoint para cambiar empresa activa, llámalo aquí.
-    // por ahora actualizamos estado local:
     setActiveCompanyId(nextCompanyId);
+    setActiveCompanyCookie(nextCompanyId);
   }
 
   async function onLogout() {
     try {
-      await apiFetch("/api/logout/", { method: "POST" });
+      await apiFetch("/api/auth/logout", { method: "POST" });
     } finally {
-      window.location.href = "/login";
+      router.push("/login");
     }
   }
 
@@ -155,18 +173,6 @@ export default function DashboardPage() {
           )}
         </ul>
       </section>
-
-      {canInventoryRead ? (
-        <section style={{ marginTop: 20, padding: 12, border: "1px solid #ddd" }}>
-          <h3>Módulo Inventario</h3>
-          <p>Visible por permiso: <code>inventory.read</code>.</p>
-        </section>
-      ) : (
-        <section style={{ marginTop: 20, padding: 12, border: "1px solid #f0d0d0" }}>
-          <h3>Módulo Inventario</h3>
-          <p>No tienes permiso <code>inventory.read</code> en esta empresa activa.</p>
-        </section>
-      )}
 
       <button onClick={onLogout} style={{ marginTop: 20 }}>
         Cerrar sesión
