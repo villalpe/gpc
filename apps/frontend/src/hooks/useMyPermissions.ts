@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiFetch, ApiError } from "@/lib/apiFetch";
 
 type PermissionsResponse = {
   permissions: string[];
@@ -9,6 +10,7 @@ type PermissionsResponse = {
 export function useMyPermissions() {
   const [permissions, setPermissions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -16,21 +18,21 @@ export function useMyPermissions() {
     async function run() {
       try {
         setLoading(true);
-        const res = await fetch("/api/me/permissions", {
-          method: "GET",
-          credentials: "include",
-          cache: "no-store",
-        });
+        setError(null);
 
-        if (!res.ok) {
-          setPermissions([]);
-          return;
-        }
-
+        const res = await apiFetch("/api/me/permissions", { method: "GET" });
         const data: PermissionsResponse = await res.json();
+
         if (mounted) setPermissions(data.permissions || []);
-      } catch {
-        if (mounted) setPermissions([]);
+      } catch (e) {
+        if (!mounted) return;
+        setPermissions([]);
+
+        if (e instanceof ApiError && e.status === 403) {
+          setError("No autorizado");
+        } else {
+          setError("No se pudieron cargar permisos");
+        }
       } finally {
         if (mounted) setLoading(false);
       }
@@ -42,5 +44,5 @@ export function useMyPermissions() {
     };
   }, []);
 
-  return { permissions, loading };
+  return { permissions, loading, error };
 }

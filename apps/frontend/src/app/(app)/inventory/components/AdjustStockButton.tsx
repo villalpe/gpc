@@ -1,6 +1,6 @@
 "use client";
 
-import { apiFetch } from "@/lib/apiFetch";
+import { apiFetch, ApiError } from "@/lib/apiFetch";
 import { toast } from "sonner";
 
 export function AdjustStockButton() {
@@ -13,8 +13,8 @@ export function AdjustStockButton() {
       });
 
       toast.success("Inventario ajustado");
-    } catch (e: any) {
-      if (e?.message === "FORBIDDEN") {
+    } catch (e: unknown) {
+      if (e instanceof ApiError && e.status === 403) {
         toast.error("No autorizado");
         return;
       }
