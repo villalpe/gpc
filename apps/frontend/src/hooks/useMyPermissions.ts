@@ -11,6 +11,7 @@ export function useMyPermissions() {
   const [permissions, setPermissions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [redirectTo, setRedirectTo] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -19,6 +20,7 @@ export function useMyPermissions() {
       try {
         setLoading(true);
         setError(null);
+        setRedirectTo(null);
 
         const res = await apiFetch("/api/me/permissions", { method: "GET" });
         const data: PermissionsResponse = await res.json();
@@ -28,10 +30,17 @@ export function useMyPermissions() {
         if (!mounted) return;
         setPermissions([]);
 
-        if (e instanceof ApiError && e.status === 403) {
-          setError("No autorizado");
+        if (e instanceof ApiError) {
+          if (e.status === 401) {
+            setError("Tu sesión expiró. Inicia sesión nuevamente.");
+            setRedirectTo(e.redirectTo ?? "/login");
+          } else if (e.status === 403) {
+            setError("No autorizado para esta acción.");
+          } else {
+            setError("No se pudieron cargar permisos.");
+          }
         } else {
-          setError("No se pudieron cargar permisos");
+          setError("No se pudieron cargar permisos.");
         }
       } finally {
         if (mounted) setLoading(false);
@@ -44,5 +53,5 @@ export function useMyPermissions() {
     };
   }, []);
 
-  return { permissions, loading, error };
+  return { permissions, loading, error, redirectTo };
 }

@@ -1,9 +1,12 @@
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message?: string) {
+  redirectTo?: string;
+
+  constructor(status: number, message?: string, redirectTo?: string) {
     super(message ?? `HTTP_${status}`);
     this.name = "ApiError";
     this.status = status;
+    this.redirectTo = redirectTo;
   }
 }
 
@@ -47,8 +50,13 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
     }
   }
 
+  // Si sigue 401 después del refresh, sesión inválida/expirada
+  if (res.status === 401) {
+    throw new ApiError(401, "Tu sesión expiró. Inicia sesión nuevamente.", "/login");
+  }
+
   if (res.status === 403) {
-    throw new ApiError(403, "No autorizado");
+    throw new ApiError(403, "No autorizado para esta acción.");
   }
 
   if (!res.ok) {
