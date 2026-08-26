@@ -3,8 +3,14 @@ name: Backend CI
 on:
   push:
     branches: ["master", "main", "develop"]
+    paths:
+      - "apps/backend/**"
+      - ".github/workflows/backend-ci.yml"
   pull_request:
     branches: ["master", "main", "develop"]
+    paths:
+      - "apps/backend/**"
+      - ".github/workflows/backend-ci.yml"
 
 jobs:
   test-backend:
@@ -27,7 +33,7 @@ jobs:
 
     env:
       DJANGO_SETTINGS_MODULE: config.settings
-      DJANGO_SECRET_KEY: ci-secret-key
+      DJANGO_SECRET_KEY: ci-secret-key-change-me-with-at-least-32-chars
       DJANGO_DEBUG: "False"
       DJANGO_ALLOWED_HOSTS: "127.0.0.1,localhost"
 
@@ -63,11 +69,14 @@ jobs:
         working-directory: apps/backend
         run: python manage.py migrate --noinput
 
+      - name: Django system check
+        working-directory: apps/backend
+        run: python manage.py check
+
       - name: Run lint (ruff)
         working-directory: apps/backend
-        run: python -m ruff check .        
+        run: python -m ruff check .
 
       - name: Run tests
         working-directory: apps/backend
-        run: |
-          python manage.py test accounts.tests -v 2
+        run: python manage.py test -v 2
