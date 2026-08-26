@@ -57,13 +57,19 @@ class AuditEventsListTests(TestCase):
 
     def test_admin_can_list_events(self):
         self._login("admin.audit@gpc.com")
-        res = self.client.get("/api/audit/events/", {"company_id": str(self.company.id)})
+        res = self.client.get(
+            "/api/audit/events/",
+            HTTP_X_COMPANY_ID=str(self.company.id),
+        )
         self.assertEqual(res.status_code, 200)
-        self.assertGreaterEqual(res.data["count"], 1)
+        self.assertGreaterEqual(len(res.data), 1)
 
     def test_viewer_forbidden(self):
         self._login("viewer.audit@gpc.com")
-        res = self.client.get("/api/audit/events/", {"company_id": str(self.company.id)})
+        res = self.client.get(
+            "/api/audit/events/",
+            HTTP_X_COMPANY_ID=str(self.company.id),
+        )
         self.assertEqual(res.status_code, 403)
 
     def test_requires_company_id(self):
