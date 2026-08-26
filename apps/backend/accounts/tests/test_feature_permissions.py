@@ -123,9 +123,11 @@ class FeaturePermissionsAPITests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("detail", res.data)
 
-    def test_permissions_no_membership_returns_empty_list(self):
+    def test_permissions_no_membership_returns_forbidden(self):
         User.objects.create_user(email="outsider@gpc.com", password=self.password)
         self._auth("outsider@gpc.com", self.password)
+
         res = self._get_permissions(self.company.id)
-        self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.data["permissions"], [])
+
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("detail", res.data)        
