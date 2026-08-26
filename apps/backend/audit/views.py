@@ -1,78 +1,45 @@
-from django.utils.dateparse import parse_datetime
+from django.core.exceptions import PermissionDenied, ValidationError
+from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from accounts.permission_service import get_user_role_in_company
+from accounts.permissions import Role, user_role_for_company
 from audit.models import AuditEvent
-
-ALLOWED_ROLES = {"SUPERADMIN", "ADMIN_COMPANY"}
+from core.company_context import require_company_membership
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def audit_events_list(request):
-    company_id = request.query_params.get("company_id") or request.headers.get("X-Company-Id")
-    if not company_id:
-        return Response(
-            {"detail": "company_id query param or X-Company-Id header required"},
-            status=400,
-        )
-
-    role = get_user_role_in_company(request.user, company_id)
-    if role not in ALLOWED_ROLES:
-        return Response({"detail": "Forbidden"}, status=403)
-
-    qs = AuditEvent.objects.filter(company_id=company_id).order_by("-created_at")
-
-    action = request.query_params.get("action")
-    if action:
-        qs = qs.filter(action=action)
-
-    dt_from = request.query_params.get("from")
-    if dt_from:
-        parsed = parse_datetime(dt_from)
-        if not parsed:
-            return Response(
-                {"detail": "Invalid 'from' datetime format (ISO 8601 required)"},
-                status=400,
-            )
-        qs = qs.filter(created_at__gte=parsed)
-
-    dt_to = request.query_params.get("to")
-    if dt_to:
-        parsed = parse_datetime(dt_to)
-        if not parsed:
-            return Response(
-                {"detail": "Invalid 'to' datetime format (ISO 8601 required)"},
-                status=400,
-        )
-        qs = qs.filter(created_at__lte=parsed)
-
     try:
-        limit = int(request.query_params.get("limit", 50))
-    except ValueError:
-        return Response({"detail": "limit must be integer"}, status=400)
+        company_id = require_company_membership(request)
+    except ValidationError:
+        return Response(
+            {"detail": "X-Company-Id header is required and must be a valid UUID"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    except PermissionDenied:
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
 
-    limit = max(1, min(limit, 200))
-    rows = qs[:limit]
+    role = user_role_for_company(request.user, company_id)
+    if role not in {Role.SUPERADMIN, Role.ADMIN_COMPANY}:
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
 
-    data = [
-        {
-            "id": str(r.id),
-            "created_at": r.created_at.isoformat(),
-            "request_id": r.request_id,
-            "company_id": str(r.company_id) if r.company_id else None,
-            "user_id": str(r.user_id) if r.user_id else None,
-            "action": r.action,
-            "status": r.status,
-            "message": r.message,
-            "ip": r.ip,
-            "method": r.method,
-            "path": r.path,
-            "metadata": r.metadata,
-        }
-        for r in rows
-    ]
+    events = AuditEvent.objects.filter(company_id=company_id).order_by("-created_at")[:100]
 
-    return Response({"count": len(data), "results": data})
+    return Response(
+        [
+            {
+                "id": str(e.id),
+                "company_id": str(e.company_id) if e.company_id else None,
+                "action": e.action,
+                "status": e.status,
+                "message": e.message,
+                "user_id": str(e.user_id) if e.user_id else None,
+                "metadata": e.metadata,
+                "created_at": e.created_at.isoformat(),
+            }
+            for e in events
+        ]
+    )
