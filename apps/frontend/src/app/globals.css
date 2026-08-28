@@ -11,6 +11,15 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Paleta custom */
+  --color-surface-1: #020617; /* más oscuro */
+  --color-surface-2: #111827; /* slate-900 */
+  --color-surface-3: #1f2937; /* gray-800 */
+  
+  --color-brand-red: #ff4d63;
+  --color-brand-red-strong: #ff3d53;
+  --color-brand-red-soft: #ff5a6b;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -23,5 +32,8 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
 }

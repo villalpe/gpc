@@ -1,19 +1,29 @@
-import Link from "next/link";
-import { healthCheck } from "@/lib/api";
+import { HeroSection } from "@/components/marketing/HeroSection";
+import { ProcessSteps } from "@/components/marketing/ProcessSteps";
+import { BenefitsGrid } from "@/components/marketing/BenefitsGrid";
+import { CarriersStrip } from "@/components/marketing/CarriersStrip";
+import { ValuesSection } from "@/components/marketing/ValuesSection";
+import { MissionVisionSection } from "@/components/marketing/MissionVisionSection";
+import { FinalCta } from "@/components/marketing/FinalCta";
+import { SiteHeader } from "@/components/marketing/SiteHeader";
+import { SiteFooter } from "@/components/marketing/SiteFooter";
+import { ServicesSection } from "@/components/marketing/ServicesSection";
 
-export default async function Home() {
-  const data = await healthCheck();
-
+export default function HomePage() {
   return (
-    <main style={{ padding: 24 }}>
-      <h1>GPC Platform</h1>
-      <p>Backend status: {data.status}</p>
-      <p>Service: {data.service}</p>
-
-      <div style={{ marginTop: 20, display: "flex", gap: 12 }}>
-        <Link href="/login">Ir a Login</Link>
-        <Link href="/dashboard">Ir a Dashboard</Link>
-      </div>
-    </main>
+    <div className="min-h-screen bg-white text-[var(--ink)]">
+      <SiteHeader />
+      <main>
+        <HeroSection />
+        <ProcessSteps />
+        <ServicesSection />
+        <BenefitsGrid />
+        <CarriersStrip />
+        <ValuesSection />
+        <MissionVisionSection />
+        <FinalCta />
+      </main>
+      <SiteFooter />
+    </div>
   );
 }
