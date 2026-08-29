@@ -32,8 +32,8 @@ export function SiteFooter() {
           <h5 className="text-sm font-semibold text-[var(--ink)]">Contacto</h5>
           <ul className="mt-3 space-y-2 text-sm text-[var(--muted)]">
             <li>contacto@globalpackcenter.com</li>
-            <li>+52 55 0000 0000</li>
-            <li>CDMX, México</li>
+            <li>+52 442 223 4413</li>
+            <li>Querétaro, México</li>
           </ul>
         </div>
       </div>

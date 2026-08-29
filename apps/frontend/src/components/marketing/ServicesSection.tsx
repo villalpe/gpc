@@ -3,7 +3,7 @@ import { Boxes, Route, ShieldCheck, BarChart3, Clock3, Headphones } from "lucide
 const services = [
   {
     icon: Boxes,
-    title: "Paquetería nacional",
+    title: "Paquetería nacional e internacional",
     description:
       "Cobertura amplia para envíos en todo México con opciones estándar y exprés según la urgencia de tu operación.",
   },

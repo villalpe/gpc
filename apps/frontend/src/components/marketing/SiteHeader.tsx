@@ -31,23 +31,15 @@ export function SiteHeader() {
   }, [open]);
 
   return (
-    <header
-      className={[
-        "sticky top-0 z-50 w-full transition-all duration-300",
-        scrolled
-          ? "border-b border-white/15 bg-slate-950/80 shadow-lg backdrop-blur-md supports-[backdrop-filter]:bg-slate-950/70"
-          : "border-b border-transparent bg-slate-950/35 backdrop-blur-md supports-[backdrop-filter]:bg-slate-950/25",
-      ].join(" ")}
-    >
-      <div className="mx-auto flex h-24 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <header className="fixed inset-x-0 top-0 z-50 w-full border-b border-white/20 bg-slate-500/70 shadow-[0_8px_24px_rgba(15,23,42,0.18)] backdrop-blur-xl supports-[backdrop-filter]:bg-slate-500/60">      <div className="mx-auto flex h-24 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex items-center" aria-label="Global Pack Center - Inicio">
-          <div className="relative h-25 w-[220px] sm:w-[250px] md:w-[290px]">
+          <div className="relative h-28 w-[220px] sm:w-[250px] md:w-[290px]">
             <Image
               src="/images/Logo-fb.png"
               alt="Global Pack Center"
               fill
               priority
-              className="object-contain object-left"
+              className="object-contain object-left brightness-110 contrast-110 drop-shadow-[0_2px_10px_rgba(255,255,255,0.30)]"
               sizes="(max-width: 640px) 220px, (max-width: 768px) 250px, 290px"
             />
           </div>
@@ -88,7 +80,7 @@ export function SiteHeader() {
       {open && (
         <div
           id="mobile-menu"
-          className="border-t border-white/15 bg-slate-950/90 backdrop-blur md:hidden"
+          className="border-t border-white/15 bg-slate-900/90 backdrop-blur-xl md:hidden"
         >
           <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-4">
             {navItems.map((item) => (
@@ -101,13 +93,12 @@ export function SiteHeader() {
                 {item.label}
               </Link>
             ))}
-            <Link
-              href="/login"
-              onClick={() => setOpen(false)}
-              className="mt-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-center text-sm font-semibold text-white transition hover:bg-[var(--primary-dark)]"
-            >
-              Iniciar sesión
-            </Link>
+          <Link
+            href="/login"
+            className="rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--primary-dark)]"
+          >
+            Iniciar sesión
+          </Link>
           </div>
         </div>
       )}
