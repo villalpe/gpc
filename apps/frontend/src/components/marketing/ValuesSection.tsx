@@ -1,3 +1,7 @@
+"use client";
+
+import { Reveal } from "@/components/marketing/Reveal";
+
 const values = [
   {
     title: "Confiabilidad",
@@ -23,6 +27,7 @@ export function ValuesSection() {
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_85%_20%,rgba(255,77,99,0.10),transparent_35%)]" />
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(180deg,rgba(255,255,255,0.02)_0%,rgba(2,6,23,0.36)_100%)]" />
 
+      <Reveal y={18}>
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
         <h2 className="text-2xl font-bold md:text-3xl">Nuestros valores</h2>
         <p className="mt-2 text-white/70">
@@ -41,6 +46,7 @@ export function ValuesSection() {
           ))}
         </div>
       </div>
+      </Reveal>
     </section>
   );
 }

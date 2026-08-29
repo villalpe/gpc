@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { CursorGlow } from "@/components/marketing/CursorGlow";
+import { Reveal } from "@/components/marketing/Reveal";
 
 export function FinalCta() {
   return (
@@ -17,7 +18,7 @@ export function FinalCta() {
       {/* Cursor glow dinámico */}
       <CursorGlow color="255,90,107" size={340} strength={0.17} />
       <CursorGlow color="124,143,184" size={280} strength={0.12} className="mix-blend-screen" />
-
+      <Reveal y={18}>
       <div className="mx-auto max-w-5xl px-4 py-20 text-center sm:px-6 lg:px-8 md:py-24">
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white/70">
           ¿Listo para optimizar tu logística?
@@ -51,6 +52,7 @@ export function FinalCta() {
           </Link>
         </div>
       </div>
+      </Reveal>
     </section>
   );
 }

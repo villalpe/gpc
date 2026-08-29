@@ -9,6 +9,7 @@ import { SiteHeader } from "@/components/marketing/SiteHeader";
 import { SiteFooter } from "@/components/marketing/SiteFooter";
 import { ServicesSection } from "@/components/marketing/ServicesSection";
 import { StatsBand } from "@/components/marketing/StatsBand";
+import { SectionDivider } from "@/components/marketing/SectionDivider";
 
 export default function HomePage() {
   return (

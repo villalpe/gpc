@@ -1,4 +1,7 @@
+"use client";
+
 import { CursorGlow } from "@/components/marketing/CursorGlow";
+import { Reveal } from "@/components/marketing/Reveal";
 
 const benefits = [
   "Comparador de paqueterías por costo/tiempo",
@@ -20,7 +23,7 @@ export function BenefitsGrid() {
       {/* Glow dinámico */}
       <CursorGlow color="255,90,107" size={320} strength={0.16} />
       <CursorGlow color="124,143,184" size={260} strength={0.12} className="mix-blend-screen" />
-
+      <Reveal y={18}>
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 md:py-20 lg:px-8">
         <h2 className="text-2xl font-bold md:text-3xl">
           Beneficios clave
@@ -38,6 +41,7 @@ export function BenefitsGrid() {
           ))}
         </div>
       </div>
+      </Reveal>
     </section>
   );
 }

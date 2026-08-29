@@ -1,4 +1,7 @@
+"use client";
+
 import { Boxes, Route, ShieldCheck, BarChart3, Clock3, Headphones } from "lucide-react";
+import { Reveal } from "@/components/marketing/Reveal";
 
 const services = [
   {
@@ -48,6 +51,7 @@ export function ServicesSection() {
 
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Heading */}
+        <Reveal y={18}>
         <div className="mx-auto max-w-3xl text-center">
           <p className="inline-flex items-center rounded-full border border-white/20 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-white/80">
             Servicios
@@ -65,6 +69,7 @@ export function ServicesSection() {
             en eficiencia, trazabilidad y experiencia de entrega.
           </p>
         </div>
+        </Reveal>
 
         {/* Grid */}
         <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
