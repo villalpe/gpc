@@ -9,7 +9,8 @@ const navItems = [
   { label: "Inicio", href: "/" },
   { label: "Nosotros", href: "/nosotros" },
   { label: "Servicios", href: "/servicios" },
-  { label: "Contacto", href: "/contacto" },
+  { label: "Contacto", href: "/contact" },
+  { label: "Cotización", href: "/solicitar-cotizacion" },
 ];
 
 export function SiteHeader() {
@@ -33,7 +34,7 @@ export function SiteHeader() {
   return (
       <header className="fixed inset-x-0 top-0 z-50 w-full border-b border-white/20 bg-slate-500/70 shadow-[0_8px_24px_rgba(15,23,42,0.18)] backdrop-blur-xl supports-[backdrop-filter]:bg-slate-500/60">      <div className="mx-auto flex h-24 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex items-center" aria-label="Global Pack Center - Inicio">
-          <div className="relative h-28 w-[220px] sm:w-[250px] md:w-[290px]">
+          <div className="relative h-30 w-[220px] sm:w-[250px] md:w-[290px]">
             <Image
               src="/images/Logo-fb.png"
               alt="Global Pack Center"

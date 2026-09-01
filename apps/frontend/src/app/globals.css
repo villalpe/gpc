@@ -1,9 +1,16 @@
 @import "tailwindcss";
 @import "../styles/tokens.css";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
 }
 
 @theme inline {
@@ -13,29 +20,22 @@
   --font-mono: var(--font-geist-mono);
 
   /* Paleta custom */
-  --color-surface-1: #020617; /* más oscuro */
-  --color-surface-2: #111827; /* slate-900 */
-  --color-surface-3: #1f2937; /* gray-800 */
-  
+  --color-surface-1: #020617;
+  --color-surface-2: #111827;
+  --color-surface-3: #1f2937;
+
   --color-brand-red: #ff4d63;
   --color-brand-red-strong: #ff3d53;
   --color-brand-red-soft: #ff5a6b;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-}
-
-html {
-  scroll-behavior: smooth;
 }
 
 @keyframes marquee {
