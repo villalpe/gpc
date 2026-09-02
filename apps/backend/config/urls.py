@@ -30,4 +30,6 @@ urlpatterns = [
     path("api/modules/audit/ping/", audit_module_ping, name="audit_module_ping"),
     path("api/modules/inventory/ping/", inventory_module_ping, name="inventory_module_ping"),
     path("api/modules/inventory/adjust/", inventory_adjust, name="inventory_adjust"),
+
+    path("api/quotes/", include("quotes.urls")),
 ]

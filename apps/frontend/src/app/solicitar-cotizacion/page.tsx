@@ -8,11 +8,11 @@ import {
   CheckCircle2,
   Clock3,
   Globe2,
-  Package2,
   Scale,
   Send,
   ShieldCheck,
   Truck,
+  BadgeDollarSign,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { useTheme } from "next-themes";
@@ -20,6 +20,57 @@ import { useTheme } from "next-themes";
 type ShipmentScope = "nacional" | "internacional";
 type Urgency = "economico" | "express" | "prioritario";
 type Frequency = "unico" | "semanal" | "mensual";
+
+type QuoteOption = {
+  carrier_code: string;
+  carrier_name: string;
+  estimated_price_mxn: number;
+  eta_days: number;
+  service_level: string;
+  score: number;
+};
+
+type QuoteResponse = {
+  message: string;
+  data: {
+    weight: {
+      real_kg: number;
+      volumetric_kg: number;
+      chargeable_kg: number;
+      volumetric_factor: number;
+    };
+    options: QuoteOption[];
+  };
+};
+
+      function Select<T extends string>({
+      label,
+      value,
+      onChange,
+      options,
+    }: {
+      label: string;
+      value: T;
+      onChange: (v: T) => void;
+      options: Array<{ label: string; value: T }>;
+    }) {
+      return (
+        <div>
+          <label className="mb-1.5 block text-sm font-medium">{label}</label>
+          <select
+            value={value}
+            onChange={(e) => onChange(e.target.value as T)}
+            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#FF5A6B] focus:ring-4 focus:ring-[#FF5A6B]/15 dark:border-white/20 dark:bg-slate-900/60 dark:text-white"
+          >
+            {options.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      );
+    }
 
 export default function QuotePage() {
   const [fullName, setFullName] = useState("");
@@ -54,6 +105,9 @@ export default function QuotePage() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
 
+  const [quoteOptions, setQuoteOptions] = useState<QuoteOption[]>([]);
+  const [serverWeight, setServerWeight] = useState<QuoteResponse["data"]["weight"] | null>(null);
+
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
 
@@ -65,7 +119,7 @@ export default function QuotePage() {
     const w = Number(widthCm || 0);
     const h = Number(heightCm || 0);
     if (!l || !w || !h) return 0;
-    return Number(((l * w * h) / 5000).toFixed(2)); // fórmula típica aérea
+    return Number(((l * w * h) / 5000).toFixed(2));
   }, [lengthCm, widthCm, heightCm]);
 
   const chargeableWeight = useMemo(
@@ -90,6 +144,8 @@ export default function QuotePage() {
     e.preventDefault();
     setSuccess(false);
     setError("");
+    setQuoteOptions([]);
+    setServerWeight(null);
 
     if (!isValid) {
       setError("Completa los campos obligatorios para poder cotizar.");
@@ -98,11 +154,51 @@ export default function QuotePage() {
 
     setLoading(true);
     try {
-      // Aquí luego conectamos backend real: POST /api/quotes/request
-      await new Promise((r) => setTimeout(r, 900));
+      const payload = {
+        full_name: fullName,
+        company,
+        email,
+        phone,
+        scope,
+        service_type: serviceType,
+        origin_country: originCountry,
+        origin_zip: originZip,
+        dest_country: destCountry,
+        dest_zip: destZip,
+        dest_city: destCity,
+        weight_kg: Number(weightKg),
+        length_cm: Number(lengthCm),
+        width_cm: Number(widthCm),
+        height_cm: Number(heightCm),
+        pieces: Number(pieces),
+        declared_value: declaredValue ? Number(declaredValue) : 0,
+        requires_insurance: requiresInsurance,
+        urgency,
+        frequency,
+        pickup,
+        notes,
+      };
+
+      const apiBase = process.env.NEXT_PUBLIC_API_URL?.trim();
+      const endpoint = `${apiBase}/quotes/request/`;
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const json = (await res.json().catch(() => null)) as QuoteResponse | null;
+
+      if (!res.ok) {
+        throw new Error(json?.message || "No se pudo procesar la cotización.");
+      }
+
+      setQuoteOptions(json?.data?.options ?? []);
+      setServerWeight(json?.data?.weight ?? null);
       setSuccess(true);
-    } catch {
-      setError("No se pudo enviar la solicitud. Intenta nuevamente.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo enviar la solicitud. Intenta nuevamente.");
     } finally {
       setLoading(false);
     }
@@ -127,34 +223,34 @@ export default function QuotePage() {
             </p>
           </div>
 
-            <div className="flex items-center gap-3">
-                <div
-                className={
-                    isDark
-                    ? "rounded-xl border border-slate-200 bg-white px-2 py-1 shadow-sm"
-                    : "bg-transparent px-0 py-0 shadow-none border-0"
-                }
-                >
-                <div className="relative h-22 w-[175px]">
-                    <Image
-                    src="/images/Logo-fb.png"
-                    alt="Global Pack Center"
-                    fill
-                    className="object-contain"
-                    sizes="175px"
-                    />
-                </div>
-                </div>
+          <div className="flex items-center gap-3">
+            <div
+              className={
+                isDark
+                  ? "rounded-xl border border-slate-200 bg-white px-2 py-1 shadow-sm"
+                  : "bg-transparent px-0 py-0 shadow-none border-0"
+              }
+            >
+              <div className="relative h-20 w-[175px]">
+                <Image
+                  src="/images/Logo-fb.png"
+                  alt="Global Pack Center"
+                  fill
+                  className="object-contain"
+                  sizes="175px"
+                />
+              </div>
+            </div>
 
             <Link
-                href="/"
-                className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/20 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
+              href="/"
+              className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/20 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
             >
-                Volver al inicio
+              Volver al inicio
             </Link>
 
             <ThemeToggle />
-            </div>
+          </div>
         </div>
       </section>
 
@@ -174,9 +270,24 @@ export default function QuotePage() {
           <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/15 dark:bg-white/[0.06]">
             <h3 className="font-semibold">Peso cobrable estimado</h3>
             <p className="mt-2 text-2xl font-bold">{chargeableWeight.toFixed(2)} kg</p>
-            <p className="mt-1 text-xs text-slate-500 dark:text-white/60">
-              Máximo entre peso real y volumétrico.
+
+            <div className="mt-3 space-y-1 text-xs text-slate-600 dark:text-white/70">
+              <p>Peso real: <strong>{numericWeight.toFixed(2)} kg</strong></p>
+              <p>Peso volumétrico: <strong>{volumetricKg.toFixed(2)} kg</strong></p>
+            </div>
+
+            <p className="mt-2 text-xs text-slate-500 dark:text-white/60">
+              El peso cobrable se determina entre el peso real y el volumétrico (se toma el mayor).
             </p>
+            <p className="mt-1 text-[11px] text-slate-400 dark:text-white/50">
+              Fórmula volumétrica: (Largo × Ancho × Alto) / 5000 en cm. El factor puede variar según paquetería.
+            </p>
+
+            {serverWeight && (
+              <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs dark:border-white/15 dark:bg-white/5">
+                <p>Confirmado por servidor: <strong>{serverWeight.chargeable_kg.toFixed(2)} kg</strong></p>
+              </div>
+            )}
           </article>
         </aside>
 
@@ -191,15 +302,25 @@ export default function QuotePage() {
               <Input label="Email *" value={email} onChange={setEmail} placeholder="tu@empresa.com" type="email" />
               <Input label="Teléfono / WhatsApp *" value={phone} onChange={setPhone} placeholder="+52..." />
 
-              <Select label="Tipo de envío *" value={scope} onChange={setScope} options={[
-                { label: "Nacional", value: "nacional" },
-                { label: "Internacional", value: "internacional" },
-              ]} />
-              <Select label="Servicio *" value={serviceType} onChange={setServiceType} options={[
-                { label: "Paquete", value: "paquete" },
-                { label: "Documento", value: "documento" },
-                { label: "Carga ligera", value: "carga_ligera" },
-              ]} />
+              <Select
+                label="Tipo de envío *"
+                value={scope}
+                onChange={setScope}
+                options={[
+                  { label: "Nacional", value: "nacional" },
+                  { label: "Internacional", value: "internacional" },
+                ]}
+              />
+              <Select
+                label="Servicio *"
+                value={serviceType}
+                onChange={setServiceType}
+                options={[
+                  { label: "Paquete", value: "paquete" },
+                  { label: "Documento", value: "documento" },
+                  { label: "Carga ligera", value: "carga_ligera" },
+                ]}
+              />
 
               <Input label="País origen *" value={originCountry} onChange={setOriginCountry} placeholder="México" />
               <Input label="CP origen *" value={originZip} onChange={setOriginZip} placeholder="01000" />
@@ -217,17 +338,27 @@ export default function QuotePage() {
               <Input label="Ancho (cm) *" value={widthCm} onChange={setWidthCm} placeholder="20" type="number" />
               <Input label="Alto (cm) *" value={heightCm} onChange={setHeightCm} placeholder="15" type="number" />
 
-              <Select label="Urgencia *" value={urgency} onChange={(v) => setUrgency(v as Urgency)} options={[
-                { label: "Económico", value: "economico" },
-                { label: "Express", value: "express" },
-                { label: "Prioritario", value: "prioritario" },
-              ]} />
+              <Select
+                label="Urgencia *"
+                value={urgency}
+                onChange={(v) => setUrgency(v as Urgency)}
+                options={[
+                  { label: "Económico", value: "economico" },
+                  { label: "Express", value: "express" },
+                  { label: "Prioritario", value: "prioritario" },
+                ]}
+              />
 
-              <Select label="Frecuencia *" value={frequency} onChange={(v) => setFrequency(v as Frequency)} options={[
-                { label: "Único envío", value: "unico" },
-                { label: "Semanal", value: "semanal" },
-                { label: "Mensual", value: "mensual" },
-              ]} />
+              <Select
+                label="Frecuencia *"
+                value={frequency}
+                onChange={(v) => setFrequency(v as Frequency)}
+                options={[
+                  { label: "Único envío", value: "unico" },
+                  { label: "Semanal", value: "semanal" },
+                  { label: "Mensual", value: "mensual" },
+                ]}
+              />
 
               <label className="md:col-span-2 flex items-center gap-2 text-sm">
                 <input
@@ -271,7 +402,7 @@ export default function QuotePage() {
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#C1374A] px-5 text-sm font-semibold text-white transition hover:bg-[#9F2436] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Send className="h-4 w-4" />
-                {loading ? "Enviando..." : "Solicitar cotización"}
+                {loading ? "Cotizando..." : "Solicitar cotización"}
               </button>
             </div>
 
@@ -279,7 +410,7 @@ export default function QuotePage() {
               <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-300">
                 <span className="inline-flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4" />
-                  ¡Solicitud enviada! Te contactaremos con la mejor opción.
+                  ¡Solicitud enviada! Encontramos opciones para ti.
                 </span>
               </div>
             )}
@@ -290,6 +421,36 @@ export default function QuotePage() {
                   <AlertCircle className="h-4 w-4" />
                   {error}
                 </span>
+              </div>
+            )}
+
+            {quoteOptions.length > 0 && (
+              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/15 dark:bg-white/[0.04]">
+                <h4 className="flex items-center gap-2 text-base font-bold">
+                  <BadgeDollarSign className="h-4 w-4 text-[#C1374A]" />
+                  Top 3 opciones recomendadas
+                </h4>
+
+                <div className="mt-3 grid gap-3 md:grid-cols-3">
+                  {quoteOptions.map((opt, idx) => (
+                    <article
+                      key={opt.carrier_code}
+                      className="rounded-xl border border-slate-200 bg-white p-3 dark:border-white/15 dark:bg-white/[0.06]"
+                    >
+                      <p className="text-xs text-slate-500 dark:text-white/60">Opción #{idx + 1}</p>
+                      <p className="mt-1 text-sm font-semibold">{opt.carrier_name}</p>
+                      <p className="mt-2 text-lg font-bold text-[#C1374A]">
+                        ${opt.estimated_price_mxn.toFixed(2)} MXN
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-white/60">
+                        Entrega estimada: {opt.eta_days} día(s)
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-white/60">
+                        Servicio: {opt.service_level}
+                      </p>
+                    </article>
+                  ))}
+                </div>
               </div>
             )}
           </form>
@@ -326,31 +487,3 @@ function Input({
   );
 }
 
-function Select({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: Array<{ label: string; value: string }>;
-}) {
-  return (
-    <div>
-      <label className="mb-1.5 block text-sm font-medium">{label}</label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#FF5A6B] focus:ring-4 focus:ring-[#FF5A6B]/15 dark:border-white/20 dark:bg-slate-900/60 dark:text-white"
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
