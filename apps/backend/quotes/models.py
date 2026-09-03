@@ -1,5 +1,24 @@
 from django.db import models
 
+class Customer(models.Model):
+    full_name = models.CharField(max_length=150)
+    company = models.CharField(max_length=150, blank=True, default="")
+    email = models.EmailField(unique=True)
+    phone = models.CharField(max_length=30)
+
+    pickup_address_line1 = models.CharField(max_length=180)
+    pickup_city = models.CharField(max_length=80)
+    pickup_zip = models.CharField(max_length=12)
+    pickup_country = models.CharField(max_length=80, default="México")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Customer #{self.id} - {self.full_name}"
+
 class QuoteRequest(models.Model):
     SCOPE_CHOICES = [
         ("nacional", "Nacional"),
@@ -33,6 +52,7 @@ class QuoteRequest(models.Model):
     dest_country = models.CharField(max_length=80)
     dest_zip = models.CharField(max_length=12)
     dest_city = models.CharField(max_length=80, blank=True, default="")
+    customer = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, blank=True, related_name="quotes")
 
     # Paquete
     weight_kg = models.DecimalField(max_digits=10, decimal_places=2)

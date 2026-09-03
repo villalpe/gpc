@@ -1,11 +1,46 @@
 from rest_framework import serializers
-from .models import QuoteRequest
+from .models import QuoteRequest, Customer 
 
 SCOPE_CHOICES = ("nacional", "internacional")
 URGENCY_CHOICES = ("economico", "express", "prioritario")
 FREQUENCY_CHOICES = ("unico", "semanal", "mensual")
 
+class CustomerCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Customer
+        fields = [
+            "id",
+            "full_name",
+            "company",
+            "email",
+            "phone",
+            "pickup_address_line1",
+            "pickup_city",
+            "pickup_zip",
+            "pickup_country",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+
+class CustomerListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Customer
+        fields = [
+            "id",
+            "full_name",
+            "company",
+            "email",
+            "phone",
+            "pickup_address_line1",
+            "pickup_city",
+            "pickup_zip",
+            "pickup_country",
+            "created_at",
+        ]
+
 class QuoteRequestCreateSerializer(serializers.Serializer):
+    customer_id = serializers.IntegerField(required=False, allow_null=True, min_value=1)
     full_name = serializers.CharField(min_length=3, max_length=150)
     company = serializers.CharField(required=False, allow_blank=True, max_length=150)
     email = serializers.EmailField()
@@ -57,6 +92,36 @@ class QuoteRequestListSerializer(serializers.ModelSerializer):
 
 
 class QuoteRequestDetailSerializer(serializers.ModelSerializer):
+    customer_id = serializers.SerializerMethodField()
+    customer_pickup_address_line1 = serializers.SerializerMethodField()
+    customer_pickup_city = serializers.SerializerMethodField()
+    customer_pickup_zip = serializers.SerializerMethodField()
+    customer_pickup_country = serializers.SerializerMethodField()
+
     class Meta:
         model = QuoteRequest
         fields = "__all__"
+
+    def _get_customer(self, obj):
+      # Evita AttributeError si aún no existe FK en el modelo/migración
+      return getattr(obj, "customer", None)
+
+    def get_customer_id(self, obj):
+      c = self._get_customer(obj)
+      return c.id if c else None
+
+    def get_customer_pickup_address_line1(self, obj):
+      c = self._get_customer(obj)
+      return c.pickup_address_line1 if c else ""
+
+    def get_customer_pickup_city(self, obj):
+      c = self._get_customer(obj)
+      return c.pickup_city if c else ""
+
+    def get_customer_pickup_zip(self, obj):
+      c = self._get_customer(obj)
+      return c.pickup_zip if c else ""
+
+    def get_customer_pickup_country(self, obj):
+      c = self._get_customer(obj)
+      return c.pickup_country if c else ""
