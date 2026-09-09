@@ -6,28 +6,35 @@ import { Reveal } from "@/components/marketing/Reveal";
 const steps = [
   {
     icon: ClipboardList,
-    title: "1. Diagnóstico de operación",
+    title: "1. Diagnóstico logístico de carga",
     description:
-      "Analizamos tu volumen de envíos, zonas de cobertura y necesidades de servicio para diseñar una solución logística realista y escalable.",
+      "Evaluamos tipo de carga, volumen, frecuencia, ventanas de entrega y zonas de cobertura para diseñar una operación viable y escalable.",
   },
   {
     icon: SearchCheck,
-    title: "2. Selección de estrategia",
+    title: "2. Diseño de estrategia y red",
     description:
-      "Comparamos opciones de paquetería, tiempos de tránsito y costos para definir la combinación más eficiente para tu negocio.",
+      "Definimos la mejor combinación de rutas, unidades, aliados de transporte y niveles de servicio para optimizar costo, tiempo y confiabilidad.",
   },
   {
     icon: Truck,
-    title: "3. Implementación y ejecución",
+    title: "3. Implementación operativa",
     description:
-      "Integramos el flujo operativo y comenzamos envíos con seguimiento puntual, coordinación activa y atención personalizada.",
+      "Activamos la operación con coordinación punta a punta, control de embarques, trazabilidad y comunicación continua con tu equipo.",
   },
   {
     icon: BarChart3,
-    title: "4. Monitoreo y optimización",
+    title: "4. Control y mejora continua",
     description:
-      "Medimos resultados, detectamos oportunidades de mejora y ajustamos continuamente para reducir costos y mejorar entregas.",
+      "Monitoreamos KPIs logísticos (OTD, incidencias, costo por envío y tiempos de tránsito) para corregir desvíos y mejorar resultados de forma sostenida.",
   },
+];
+
+const kpis = [
+  { label: "Entregas a tiempo (OTD)", value: "98%" },
+  { label: "Trazabilidad operativa", value: "24/7" },
+  { label: "Reducción de incidencias", value: "-30%" },
+  { label: "Optimización de costo", value: "↓ Costo/envío" },
 ];
 
 export function ProcessSteps() {
@@ -41,24 +48,40 @@ export function ProcessSteps() {
         <Reveal y={18}>
           <div className="mx-auto max-w-3xl text-center">
             <p className="inline-flex items-center rounded-full border border-white/20 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-white/80">
-              Cómo trabajamos
+              Cómo operamos tu carga
             </p>
 
             <h2 className="mt-5 text-3xl font-extrabold tracking-tight md:text-4xl">
-              Nuestro proceso logístico
-              <span className="block text-brand-red [text-shadow:0_2px_14px_rgba(255,77,99,0.35)]">
-                claro, ágil y orientado a resultados
+              Un proceso logístico de carga
+              <span className="block text-brand-red [text-shadow:0_2px_14px_rgba(255,77,99,0.30)]">
+                claro, medible y orientado a resultados
               </span>
             </h2>
 
             <p className="mt-4 text-sm leading-relaxed text-white/75 md:text-base">
-              Te acompañamos desde el diagnóstico inicial hasta la optimización continua para que
-              cada envío aporte eficiencia, control y crecimiento a tu operación.
+              Desde el diagnóstico hasta la optimización continua, estructuramos cada etapa para
+              que tu operación gane control, puntualidad y rentabilidad.
             </p>
           </div>
         </Reveal>
 
-        <div className="mt-12 grid gap-5 md:mt-14 md:grid-cols-2 xl:grid-cols-4">
+        {/* Mini KPIs */}
+        <Reveal y={16}>
+          <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {kpis.map((kpi) => (
+              <div
+                key={kpi.label}
+                className="rounded-xl border border-white/15 bg-white/5 px-4 py-3 backdrop-blur-sm"
+              >
+                <p className="text-lg font-extrabold text-white md:text-xl">{kpi.value}</p>
+                <p className="mt-1 text-xs leading-snug text-white/70 md:text-sm">{kpi.label}</p>
+              </div>
+            ))}
+          </div>
+        </Reveal>
+
+        {/* Steps */}
+        <div className="mt-10 grid gap-5 md:mt-12 md:grid-cols-2 xl:grid-cols-4">
           {steps.map((step, i) => {
             const Icon = step.icon;
 

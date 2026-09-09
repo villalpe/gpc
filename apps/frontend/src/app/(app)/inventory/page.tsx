@@ -8,7 +8,7 @@ export default function InventoryPage() {
   return (
     <RequirePermission required="inventory.read">
       <main style={{ padding: 24 }}>
-        <h1>Contenido de Inventario</h1>
+        <h1>Contenido de Operaciones</h1>
         <Can do="inventory.adjust">
           <AdjustStockButton />
         </Can>

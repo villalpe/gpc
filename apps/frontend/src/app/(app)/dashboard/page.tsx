@@ -70,6 +70,12 @@ type QuoteItem = {
   dest_country: string;
   dest_zip: string;
   dest_city?: string;
+  notes?: string;
+  customer_id?: number | null;
+  customer_pickup_address_line1?: string;
+  customer_pickup_city?: string;
+  customer_pickup_zip?: string;
+  customer_pickup_country?: string;  
   result_weight: QuoteWeight;
   result_options: QuoteOption[];
   created_at: string;
@@ -531,12 +537,26 @@ export default function DashboardPage() {
         <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/15 dark:bg-white/[0.06]">
           <h3 className="text-lg font-bold text-slate-900 dark:text-white">Módulos habilitados por permisos</h3>
           <p className="mt-1 text-sm text-slate-600 dark:text-white/70">
-            Esta navegación responde al rol activo y permisos efectivos.
+            Este bloque resume tres frentes: <strong>Operaciones</strong> para visibilidad de envíos, <strong>Auditoría</strong> para trazabilidad y control, y <strong>Usuarios</strong>  para gestión de accesos por rol.
+      La idea es operar más rápido, con seguridad y gobernanza, desde un solo panel
           </p>
 
           <div className="mt-4 grid gap-4 md:grid-cols-3">
-            <ModuleCard title="Inventario" description="Control de stock, movimientos y visibilidad operativa." href="/inventory" enabled={canInventoryRead} icon={Package} />
-            <ModuleCard title="Auditoría" description="Consulta de eventos y trazabilidad de acciones." href="/audit" enabled={canAuditRead} icon={ShieldCheck} />
+            <ModuleCard
+              title="Operaciones"
+              description="Visibilidad operativa de envíos, estatus y trazabilidad."
+              href="/inventory"
+              enabled={canInventoryRead}
+              icon={Package}
+            />
+
+            <ModuleCard
+              title="Auditoría y trazabilidad"
+              description="Consulta de eventos clave y evidencia de acciones por usuario/empresa."
+              href="/audit"
+              enabled={canAuditRead}
+              icon={ShieldCheck}
+            />
             <ModuleCard title="Usuarios" description="Invitación, administración y gobierno de accesos." href="/users" enabled={canUsersInvite} icon={Users} />
           </div>
 
@@ -662,70 +682,97 @@ export default function DashboardPage() {
           </div>
 
           {selectedQuote && (
-            <article className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-white/15 dark:bg-white/[0.04]">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h4 className="text-base font-bold text-slate-900 dark:text-white">
-                    Detalle cotización #{selectedQuote.id}
-                  </h4>
-                  <p className="text-xs text-slate-500 dark:text-white/60">{formatDateTime(selectedQuote.created_at)}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedQuote(null)}
-                  className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
-                >
-                  Cerrar
-                </button>
+          <article className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-white/15 dark:bg-white/[0.04]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                  Detalle cotización #{selectedQuote.id}
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-white/60">{formatDateTime(selectedQuote.created_at)}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedQuote(null)}
+                className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                <p className="text-xs text-slate-500 dark:text-white/60">Cliente</p>
+                <p className="mt-1 font-semibold">{selectedQuote.full_name}</p>
+                <p className="text-sm text-slate-600 dark:text-white/70">{selectedQuote.email}</p>
+                <p className="text-sm text-slate-600 dark:text-white/70">{selectedQuote.phone}</p>
+                {selectedQuote.customer_id ? (
+                  <p className="mt-1 text-xs text-slate-500 dark:text-white/60">ID cliente: #{selectedQuote.customer_id}</p>
+                ) : null}
               </div>
 
-              <div className="mt-3 grid gap-3 md:grid-cols-3">
-                <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-                  <p className="text-xs text-slate-500 dark:text-white/60">Cliente</p>
-                  <p className="mt-1 font-semibold">{selectedQuote.full_name}</p>
-                  <p className="text-sm text-slate-600 dark:text-white/70">{selectedQuote.email}</p>
-                  <p className="text-sm text-slate-600 dark:text-white/70">{selectedQuote.phone}</p>
-                </div>
-
-                <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-                  <p className="text-xs text-slate-500 dark:text-white/60">Ruta</p>
-                  <p className="mt-1 text-sm">
-                    {selectedQuote.scope} · {selectedQuote.origin_country} ({selectedQuote.origin_zip}) →{" "}
-                    {selectedQuote.dest_country} ({selectedQuote.dest_zip})
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-white/60">
-                    Destino ciudad: {selectedQuote.dest_city || "-"}
-                  </p>
-                </div>
-
-                <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-                  <p className="text-xs text-slate-500 dark:text-white/60">Peso</p>
-                  <p className="mt-1 text-sm">Real: {selectedQuote.result_weight?.real_kg?.toFixed?.(2) ?? "-"} kg</p>
-                  <p className="text-sm">Volumétrico: {selectedQuote.result_weight?.volumetric_kg?.toFixed?.(2) ?? "-"} kg</p>
-                  <p className="text-sm font-semibold">
-                    Cobrable: {selectedQuote.result_weight?.chargeable_kg?.toFixed?.(2) ?? "-"} kg
-                  </p>
-                </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                <p className="text-xs text-slate-500 dark:text-white/60">Ruta</p>
+                <p className="mt-1 text-sm">
+                  {selectedQuote.scope} · {selectedQuote.origin_country} ({selectedQuote.origin_zip}) →{" "}
+                  {selectedQuote.dest_country} ({selectedQuote.dest_zip})
+                </p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-white/60">
+                  Destino ciudad: {selectedQuote.dest_city || "-"}
+                </p>
               </div>
 
-              <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-                <p className="text-xs text-slate-500 dark:text-white/60">Top opciones</p>
-                {loadingDetail ? (
-                  <p className="mt-2 text-sm text-slate-500 dark:text-white/60">Cargando detalle...</p>
-                ) : (
-                  <ul className="mt-2 space-y-1 text-sm">
-                    {selectedQuote.result_options?.map((opt) => (
-                      <li key={`${selectedQuote.id}-${opt.carrier_code}`}>
-                        <span className="font-semibold">{opt.carrier_name}</span>{" "}
-                        <span className="text-slate-600 dark:text-white/70">
-                          · {formatMXN(opt.estimated_price_mxn)} · {opt.eta_days} día(s)
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+              <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                <p className="text-xs text-slate-500 dark:text-white/60">Peso</p>
+                <p className="mt-1 text-sm">Real: {selectedQuote.result_weight?.real_kg?.toFixed?.(2) ?? "-"} kg</p>
+                <p className="text-sm">Volumétrico: {selectedQuote.result_weight?.volumetric_kg?.toFixed?.(2) ?? "-"} kg</p>
+                <p className="text-sm font-semibold">
+                  Cobrable: {selectedQuote.result_weight?.chargeable_kg?.toFixed?.(2) ?? "-"} kg
+                </p>
               </div>
-            </article>
+            </div>
+
+            {/* NUEVO: Recolección + Comentarios */}
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                <p className="text-xs text-slate-500 dark:text-white/60">Dirección de recolección</p>
+                <p className="mt-1 text-sm">
+                  {selectedQuote.customer_pickup_address_line1?.trim()
+                    ? selectedQuote.customer_pickup_address_line1
+                    : "No capturada en esta cotización"}
+                </p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-white/60">
+                  {selectedQuote.customer_pickup_city || "-"},{" "}
+                  {selectedQuote.customer_pickup_zip || "-"} ·{" "}
+                  {selectedQuote.customer_pickup_country || "-"}
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                <p className="text-xs text-slate-500 dark:text-white/60">Comentarios</p>
+                <p className="mt-1 text-sm whitespace-pre-wrap">
+                  {selectedQuote.notes?.trim() ? selectedQuote.notes : "Sin comentarios"}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
+              <p className="text-xs text-slate-500 dark:text-white/60">Top opciones</p>
+              {loadingDetail ? (
+                <p className="mt-2 text-sm text-slate-500 dark:text-white/60">Cargando detalle...</p>
+              ) : (
+                <ul className="mt-2 space-y-1 text-sm">
+                  {selectedQuote.result_options?.map((opt) => (
+                    <li key={`${selectedQuote.id}-${opt.carrier_code}`}>
+                      <span className="font-semibold">{opt.carrier_name}</span>{" "}
+                      <span className="text-slate-600 dark:text-white/70">
+                        · {formatMXN(opt.estimated_price_mxn)} · {opt.eta_days} día(s)
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </article>
           )}
         </section>
       </div>

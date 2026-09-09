@@ -4,12 +4,12 @@ import { CursorGlow } from "@/components/marketing/CursorGlow";
 import { Reveal } from "@/components/marketing/Reveal";
 
 const benefits = [
-  "Comparador de paqueterías por costo/tiempo",
-  "Visibilidad operativa de punta a punta",
-  "Escalabilidad para crecimiento multi-sucursal",
-  "Soporte especializado para operación crítica",
-  "Mejores decisiones con datos",
-  "Experiencia de cliente final más confiable",
+  "Ahorro logístico estimado de 10% a 25% por optimización de rutas y servicios",
+  "Hasta 98% de visibilidad operativa en eventos clave del envío",
+  "Escalabilidad para crecimiento multi-sucursal y picos de demanda",
+  "Soporte especializado para operación crítica y gestión de incidencias",
+  "Decisiones más rápidas con tableros y métricas accionables",
+  "Mejor experiencia de entrega para tu cliente final",
 ];
 
 export function BenefitsGrid() {
@@ -23,24 +23,33 @@ export function BenefitsGrid() {
       {/* Glow dinámico */}
       <CursorGlow color="255,90,107" size={320} strength={0.16} />
       <CursorGlow color="124,143,184" size={260} strength={0.12} className="mix-blend-screen" />
-      <Reveal y={18}>
-      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 md:py-20 lg:px-8">
-        <h2 className="text-2xl font-bold md:text-3xl">
-          Beneficios clave
-          <span className="mt-1 block text-[#d36a7a]">para tu operación logística</span>
-        </h2>
 
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {benefits.map((item) => (
-            <div
-              key={item}
-              className="rounded-2xl border border-white/20 bg-gradient-to-b from-white/14 to-white/6 p-5 backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:border-[#d36a7a]/65 hover:from-white/20 hover:to-white/10 hover:shadow-[0_10px_28px_rgba(11,19,36,0.45)]"
-            >
-              <p className="text-sm font-medium text-white/95">{item}</p>
-            </div>
-          ))}
+      <Reveal y={18}>
+        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 md:py-20 lg:px-8">
+          <h2 className="text-2xl font-bold md:text-3xl">
+            Beneficios clave
+            <span className="mt-1 block text-brand-red">para tu operación logística</span>
+          </h2>
+
+          <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/70 md:text-base">
+            Impactos orientativos basados en mejoras operativas de logística y distribución.
+          </p>
+
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {benefits.map((item) => (
+              <div
+                key={item}
+                className="rounded-2xl border border-white/20 bg-gradient-to-b from-white/14 to-white/6 p-5 backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:border-brand-red/55 hover:from-white/20 hover:to-white/10 hover:shadow-[0_10px_28px_rgba(11,19,36,0.45)]"
+              >
+                <p className="text-sm font-medium leading-relaxed text-white/95">{item}</p>
+              </div>
+            ))}
+          </div>
+
+          <p className="mt-5 text-xs text-white/55 md:text-sm">
+            *Los resultados pueden variar según tipo de carga, volumen, cobertura y condiciones de operación.
+          </p>
         </div>
-      </div>
       </Reveal>
     </section>
   );

@@ -4,7 +4,6 @@ import { useMemo, useState, type FormEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
-  Building2,
   Mail,
   Phone,
   MapPin,
@@ -25,6 +24,14 @@ export default function ContactPage() {
   const [company, setCompany] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+
+  // Campos logísticos de calificación
+  const [origin, setOrigin] = useState("");
+  const [destination, setDestination] = useState("");
+  const [monthlyVolume, setMonthlyVolume] = useState("");
+  const [cargoType, setCargoType] = useState("");
+  const [urgency, setUrgency] = useState("Estandar");
+
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
@@ -35,7 +42,20 @@ export default function ContactPage() {
   const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email), [email]);
   const nameValid = name.trim().length >= 3;
   const msgValid = message.trim().length >= 10;
-  const canSubmit = nameValid && emailValid && msgValid && !loading;
+  const originValid = origin.trim().length >= 2;
+  const destinationValid = destination.trim().length >= 2;
+  const volumeValid = monthlyVolume.trim().length >= 1;
+  const cargoTypeValid = cargoType.trim().length >= 2;
+
+  const canSubmit =
+    nameValid &&
+    emailValid &&
+    msgValid &&
+    originValid &&
+    destinationValid &&
+    volumeValid &&
+    cargoTypeValid &&
+    !loading;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -43,7 +63,9 @@ export default function ContactPage() {
     setDone(false);
 
     if (!canSubmit) {
-      setError("Por favor completa nombre, correo válido y mensaje (mínimo 10 caracteres).");
+      setError(
+        "Completa nombre, correo válido, origen, destino, volumen mensual, tipo de carga y mensaje (mínimo 10 caracteres)."
+      );
       return;
     }
 
@@ -52,10 +74,16 @@ export default function ContactPage() {
       // Demo UX (si luego tienes endpoint real, reemplaza por fetch)
       await new Promise((r) => setTimeout(r, 900));
       setDone(true);
+
       setName("");
       setCompany("");
       setEmail("");
       setPhone("");
+      setOrigin("");
+      setDestination("");
+      setMonthlyVolume("");
+      setCargoType("");
+      setUrgency("Estandar");
       setMessage("");
     } catch {
       setError("No se pudo enviar el formulario. Intenta nuevamente.");
@@ -101,33 +129,31 @@ export default function ContactPage() {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <Link href="/" aria-label="Volver al inicio" className="inline-flex items-center">
-                {isDark ? (
-                    // DARK: con contenedor claro para contraste
+                  {isDark ? (
                     <div className="rounded-lg border border-slate-200 bg-white px-2 py-1">
-                    <div className="relative h-22 w-[155px]">
+                      <div className="relative h-22 w-[155px]">
                         <Image
-                        src="/images/Logo-fb.png"
-                        alt="Global Pack Center"
-                        fill
-                        priority
-                        className="object-contain"
-                        sizes="155px"
+                          src="/images/Logo-fb.png"
+                          alt="Global Pack Center"
+                          fill
+                          priority
+                          className="object-contain"
+                          sizes="155px"
                         />
+                      </div>
                     </div>
-                    </div>
-                ) : (
-                    // LIGHT: sin borde/contenedor y más grande
+                  ) : (
                     <div className="relative h-16 w-[220px] sm:h-[86px] sm:w-[198px]">
-                    <Image
+                      <Image
                         src="/images/Logo-fb.png"
                         alt="Global Pack Center"
                         fill
                         priority
                         className="object-contain object-left"
                         sizes="(max-width: 640px) 200px, 198px"
-                    />
+                      />
                     </div>
-                )}
+                  )}
                 </Link>
 
                 <div>
@@ -181,7 +207,7 @@ export default function ContactPage() {
 
           {/* Main content */}
           <section className="mt-6 grid gap-6 lg:grid-cols-12">
-            {/* Left - intro + cards */}
+            {/* Left */}
             <aside className="lg:col-span-5">
               <article
                 className={
@@ -197,7 +223,7 @@ export default function ContactPage() {
                       : "inline-flex rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#9F2436]"
                   }
                 >
-                  Hablemos de tu operación
+                  Hablemos de tu operación de carga
                 </p>
 
                 <h2
@@ -207,12 +233,12 @@ export default function ContactPage() {
                       : "mt-4 text-2xl font-extrabold leading-tight text-slate-900"
                   }
                 >
-                  Diseñemos una solución logística a tu medida
+                  Diseñemos una solución logística B2B a tu medida
                 </h2>
 
                 <p className={isDark ? "mt-3 text-sm text-white/75" : "mt-3 text-sm text-slate-600"}>
-                  Cuéntanos tus necesidades operativas y te proponemos una estrategia práctica para
-                  optimizar tiempos, costos y visibilidad de tus envíos.
+                  Comparte origen, destino, volumen y tipo de carga para construir una propuesta
+                  clara de costos, tiempos y cobertura.
                 </p>
               </article>
 
@@ -259,10 +285,10 @@ export default function ContactPage() {
                 }
               >
                 <h3 className={isDark ? "text-xl font-bold text-white" : "text-xl font-bold text-slate-900"}>
-                  Envíanos un mensaje
+                  Solicita asesoría logística
                 </h3>
                 <p className={isDark ? "mt-1 text-sm text-white/70" : "mt-1 text-sm text-slate-600"}>
-                  Te responderemos con una propuesta inicial y siguientes pasos.
+                  Te responderemos con una propuesta inicial para tu operación de carga.
                 </p>
 
                 <form onSubmit={onSubmit} className="mt-6 grid gap-4 md:grid-cols-2">
@@ -300,6 +326,69 @@ export default function ContactPage() {
                     isDark={isDark}
                   />
 
+                  {/* Nuevos campos logísticos */}
+                  <Field
+                    label="Origen"
+                    value={origin}
+                    onChange={setOrigin}
+                    placeholder="Ciudad / Estado de salida"
+                    isDark={isDark}
+                    required
+                    valid={origin.length === 0 ? undefined : originValid}
+                  />
+                  <Field
+                    label="Destino"
+                    value={destination}
+                    onChange={setDestination}
+                    placeholder="Ciudad / Estado de entrega"
+                    isDark={isDark}
+                    required
+                    valid={destination.length === 0 ? undefined : destinationValid}
+                  />
+                  <Field
+                    label="Volumen mensual"
+                    value={monthlyVolume}
+                    onChange={setMonthlyVolume}
+                    placeholder="Ej. 200 envíos / mes"
+                    isDark={isDark}
+                    required
+                    valid={monthlyVolume.length === 0 ? undefined : volumeValid}
+                  />
+                  <Field
+                    label="Tipo de carga"
+                    value={cargoType}
+                    onChange={setCargoType}
+                    placeholder="Paquetería, consolidada, especial, etc."
+                    isDark={isDark}
+                    required
+                    valid={cargoType.length === 0 ? undefined : cargoTypeValid}
+                  />
+
+                  <div>
+                    <label
+                      className={
+                        isDark
+                          ? "mb-1.5 block text-sm font-medium text-white/85"
+                          : "mb-1.5 block text-sm font-medium text-slate-700"
+                      }
+                    >
+                      Urgencia
+                    </label>
+                    <select
+                      value={urgency}
+                      onChange={(e) => setUrgency(e.target.value)}
+                      className={
+                        isDark
+                          ? "w-full rounded-xl border border-white/20 bg-slate-900/60 px-4 py-2.5 text-sm text-white outline-none transition focus:border-[#FF7B8F] focus:ring-4 focus:ring-[#FF7B8F]/20"
+                          : "w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-[#FF5A6B] focus:ring-4 focus:ring-[#FF5A6B]/15"
+                      }
+                    >
+                      <option>Estandar</option>
+                      <option>Exprés</option>
+                      <option>Prioritaria</option>
+                    </select>
+                  </div>
+
                   <div className="md:col-span-2">
                     <label
                       className={
@@ -314,7 +403,7 @@ export default function ContactPage() {
                       value={message}
                       onChange={(e) => setMessage(e.target.value)}
                       rows={6}
-                      placeholder="Cuéntanos volumen mensual, destinos, retos actuales, etc."
+                      placeholder="Cuéntanos detalles adicionales: frecuencia, horarios de recolección, incidencias actuales, requerimientos especiales, etc."
                       className={
                         isDark
                           ? "w-full rounded-xl border border-white/20 bg-slate-900/60 px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/40 focus:border-[#FF7B8F] focus:ring-4 focus:ring-[#FF7B8F]/20"
@@ -334,14 +423,10 @@ export default function ContactPage() {
                     <button
                       type="submit"
                       disabled={!canSubmit}
-                      className={
-                        isDark
-                          ? "inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#C1374A] px-5 text-sm font-semibold text-white transition hover:bg-[#9F2436] disabled:cursor-not-allowed disabled:opacity-60"
-                          : "inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#C1374A] px-5 text-sm font-semibold text-white transition hover:bg-[#9F2436] disabled:cursor-not-allowed disabled:opacity-60"
-                      }
+                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#C1374A] px-5 text-sm font-semibold text-white transition hover:bg-[#9F2436] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <Send className="h-4 w-4" />
-                      {loading ? "Enviando..." : "Enviar mensaje"}
+                      {loading ? "Enviando..." : "Enviar solicitud"}
                     </button>
                   </div>
 
@@ -355,7 +440,7 @@ export default function ContactPage() {
                     >
                       <span className="inline-flex items-center gap-2">
                         <CheckCircle2 className="h-4 w-4" />
-                        ¡Mensaje enviado! Te contactaremos pronto.
+                        ¡Solicitud enviada! Te contactaremos pronto.
                       </span>
                     </div>
                   )}

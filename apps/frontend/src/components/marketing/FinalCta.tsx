@@ -18,40 +18,41 @@ export function FinalCta() {
       {/* Cursor glow dinámico */}
       <CursorGlow color="255,90,107" size={340} strength={0.17} />
       <CursorGlow color="124,143,184" size={280} strength={0.12} className="mix-blend-screen" />
+
       <Reveal y={18}>
-      <div className="mx-auto max-w-5xl px-4 py-20 text-center sm:px-6 lg:px-8 md:py-24">
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white/70">
-          ¿Listo para optimizar tu logística?
-        </p>
+        <div className="mx-auto max-w-5xl px-4 py-20 text-center sm:px-6 lg:px-8 md:py-24">
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white/70">
+            ¿Listo para optimizar tu operación de carga?
+          </p>
 
-        <h2 className="mt-3 text-3xl font-extrabold leading-tight md:text-5xl">
-          Cotiza tu envío con
-          <span className="block bg-gradient-to-r from-rose-300 via-white to-sky-200 bg-clip-text text-transparent">
-            Global Pack Center
-          </span>
-        </h2>
+          <h2 className="mt-3 text-3xl font-extrabold leading-tight md:text-5xl">
+            Cotiza tu logística de carga con
+            <span className="block bg-gradient-to-r from-rose-300 via-white to-sky-200 bg-clip-text text-transparent">
+              Global Pack Center
+            </span>
+          </h2>
 
-        <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-white/80 md:text-base">
-          Compara paqueterías, mejora tiempos de entrega y escala tu operación con
-          soporte especializado.
-        </p>
+          <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-white/80 md:text-base">
+            Diseñamos una solución a la medida para tus envíos nacionales e internacionales,
+            con trazabilidad, control operativo y soporte especializado de punta a punta.
+          </p>
 
-        <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Link
-            href="/solicitar-cotizacion"
-            className="inline-flex items-center justify-center rounded-xl bg-[var(--primary)] px-6 py-3 text-sm font-semibold text-white transition-all duration-300 hover:-translate-y-0.5 hover:bg-[var(--primary-dark)] hover:shadow-[0_10px_25px_rgba(255,90,107,0.35)]"
-          >
-            Solicitar cotización
-          </Link>
+          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <Link
+              href="/solicitar-cotizacion"
+              className="inline-flex items-center justify-center rounded-xl bg-[var(--primary)] px-6 py-3 text-sm font-semibold text-white transition-all duration-300 hover:-translate-y-0.5 hover:bg-[var(--primary-dark)] hover:shadow-[0_10px_25px_rgba(255,90,107,0.35)]"
+            >
+              Solicitar cotización de carga
+            </Link>
 
-          <Link
-            href="/servicios"
-            className="inline-flex items-center justify-center rounded-xl border border-white/30 bg-white/10 px-6 py-3 text-sm font-semibold text-white transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/15"
-          >
-            Ver servicios
-          </Link>
+            <Link
+              href="/servicios"
+              className="inline-flex items-center justify-center rounded-xl border border-white/30 bg-white/10 px-6 py-3 text-sm font-semibold text-white transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/15"
+            >
+              Ver soluciones logísticas
+            </Link>
+          </div>
         </div>
-      </div>
       </Reveal>
     </section>
   );

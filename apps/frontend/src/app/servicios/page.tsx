@@ -19,31 +19,31 @@ import { useTheme } from "next-themes";
 const services = [
   {
     icon: Boxes,
-    title: "Paquetería nacional e internacional",
+    title: "Paquetería y carga nacional e internacional",
     description:
-      "Cobertura amplia para envíos en todo México y conexiones internacionales con opciones estándar, exprés y prioritarias.",
+      "Cobertura para envíos nacionales e internacionales con opciones estándar, exprés y prioritarias según el nivel de servicio que tu operación requiere.",
     bullets: [
       "Cobertura multi-país con aliados estratégicos",
       "Comparativa de tarifas y tiempos en minutos",
-      "Opciones para eCommerce, retail y B2B",
+      "Opciones para operaciones B2B, retail y eCommerce",
     ],
   },
   {
     icon: Route,
-    title: "Ruteo inteligente",
+    title: "Ruteo inteligente y planeación operativa",
     description:
-      "Diseñamos rutas y combinaciones de paquetería para reducir costos logísticos sin comprometer tiempos de entrega.",
+      "Diseñamos la mejor combinación de rutas, paqueterías y ventanas de entrega para optimizar costo logístico y cumplimiento.",
     bullets: [
       "Optimización por zona, volumen y urgencia",
-      "Selección dinámica de paquetería",
-      "Reducción de incidencias por mala asignación",
+      "Selección dinámica del mejor carrier",
+      "Menor incidencia por mala asignación de envíos",
     ],
   },
   {
     icon: ShieldCheck,
-    title: "Envíos más seguros",
+    title: "Envíos más seguros y trazables",
     description:
-      "Control operativo y trazabilidad por guía para proteger cada envío de origen a destino.",
+      "Aplicamos control operativo y trazabilidad por guía para mantener visibilidad de punta a punta en cada embarque.",
     bullets: [
       "Trazabilidad end-to-end",
       "Protocolos de empaque y manejo",
@@ -52,35 +52,35 @@ const services = [
   },
   {
     icon: BarChart3,
-    title: "Reporteo y visibilidad",
+    title: "Reporteo logístico y visibilidad",
     description:
-      "Convierte la operación logística en indicadores claros para tomar mejores decisiones.",
+      "Convertimos la operación de carga en indicadores claros para acelerar decisiones y sostener mejoras continuas.",
     bullets: [
-      "KPIs de cumplimiento y tiempos",
-      "Indicadores por paquetería y ruta",
-      "Insights para mejora continua",
+      "KPIs de cumplimiento y tiempos de tránsito",
+      "Indicadores por carrier, ruta y zona",
+      "Insights accionables para mejora continua",
     ],
   },
   {
     icon: Clock3,
-    title: "Operación ágil",
+    title: "Operación ágil en picos de demanda",
     description:
-      "Aceleramos tus flujos logísticos con procesos definidos para picos de demanda y operación diaria.",
+      "Estructuramos procesos flexibles para responder con velocidad en operación diaria y temporadas de alta exigencia.",
     bullets: [
       "SLAs operativos claros",
       "Escalabilidad en temporadas altas",
-      "Estandarización de procesos",
+      "Estandarización y control de procesos",
     ],
   },
   {
     icon: Headphones,
-    title: "Atención personalizada",
+    title: "Atención personalizada B2B",
     description:
-      "Un equipo experto te acompaña en la ejecución, seguimiento y mejora de tu estrategia logística.",
+      "Un equipo logístico especializado te acompaña en implementación, seguimiento y ajustes tácticos de tu operación.",
     bullets: [
       "Atención humana especializada",
       "Seguimiento puntual de casos",
-      "Recomendaciones tácticas por operación",
+      "Recomendaciones por tipo de operación",
     ],
   },
 ];
@@ -88,7 +88,7 @@ const services = [
 const benefits = [
   "Menor costo logístico por envío",
   "Mayor cumplimiento en tiempos de entrega",
-  "Visibilidad total del desempeño operativo",
+  "Visibilidad operativa de punta a punta",
   "Escalabilidad para crecer sin fricción",
 ];
 
@@ -98,23 +98,27 @@ export default function ServiciosPage() {
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900 dark:bg-[#030712] dark:text-white">
+      {/* Hero/Header */}
       <section className="relative overflow-hidden border-b border-slate-200 bg-white dark:border-white/10 dark:bg-[#0B1220]">
         <div className="pointer-events-none absolute inset-0 hidden dark:block dark:bg-[radial-gradient(circle_at_15%_20%,rgba(255,90,107,0.18),transparent_35%)]" />
         <div className="pointer-events-none absolute inset-0 hidden dark:block dark:bg-[radial-gradient(circle_at_85%_85%,rgba(124,143,184,0.16),transparent_42%)]" />
 
-        <div className="relative mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-8 sm:px-6 lg:px-8">
+        <div className="relative mx-auto flex max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
           <div>
             <p className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#9F2436] dark:border-white/20 dark:bg-white/10 dark:text-white/80">
-              Servicios logísticos
+              Servicios logísticos de carga
             </p>
+
             <h1 className="mt-3 text-3xl font-extrabold tracking-tight md:text-4xl dark:bg-gradient-to-r dark:from-white dark:via-rose-100 dark:to-white dark:bg-clip-text dark:text-transparent">
-              Soluciones para operar mejor,
+              Soluciones de carga y logística B2B
               <span className="block text-[#C1374A] dark:text-[#FF8FA1]">
-                entregar más rápido y crecer con control
+                para operar con velocidad, control y rentabilidad
               </span>
             </h1>
+
             <p className="mt-3 max-w-2xl text-sm text-slate-600 dark:text-white/75 md:text-base">
-              Centralizamos estrategia, operación y visibilidad para que tu logística sea una ventaja competitiva.
+              Centralizamos estrategia, ejecución y visibilidad para que tu operación logística sea
+              una ventaja competitiva real.
             </p>
           </div>
 
@@ -152,10 +156,11 @@ export default function ServiciosPage() {
         </div>
       </section>
 
+      {/* Beneficios */}
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <Reveal y={14}>
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/15 dark:bg-white/[0.06]">
-            <h2 className="text-lg font-bold">¿Qué ganas con Global Pack Center?</h2>
+            <h2 className="text-lg font-bold">¿Qué gana tu operación con GPC?</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {benefits.map((b) => (
                 <div
@@ -173,12 +178,13 @@ export default function ServiciosPage() {
         </Reveal>
       </section>
 
+      {/* Grid servicios */}
       <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {services.map((service) => {
+          {services.map((service, i) => {
             const Icon = service.icon;
             return (
-              <Reveal key={service.title} y={16}>
+              <Reveal key={service.title} delayMs={i * 90} y={16}>
                 <article className="group h-full rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-rose-200 hover:shadow-md dark:border-white/15 dark:bg-white/[0.06] dark:hover:border-[#FF7B8F]/60 dark:hover:bg-white/[0.10]">
                   <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-[#C1374A] dark:border-white/15 dark:bg-white/10 dark:text-[#FF9AAA]">
                     <Icon className="h-5 w-5" />

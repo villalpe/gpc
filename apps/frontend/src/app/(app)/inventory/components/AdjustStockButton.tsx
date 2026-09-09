@@ -12,7 +12,7 @@ export function AdjustStockButton() {
         body: JSON.stringify({ sku: "ABC", delta: 5 }),
       });
 
-      toast.success("Inventario ajustado");
+      toast.success("Operaciones Ajustadas");
     } catch (e: unknown) {
       if (e instanceof ApiError && e.status === 403) {
         toast.error("No autorizado");
