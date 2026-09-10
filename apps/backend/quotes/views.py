@@ -1,17 +1,19 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
+from django.db import IntegrityError
 from django.shortcuts import get_object_or_404
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from .models import QuoteRequest, Customer
+from .models import Customer, QuoteRequest
 from .serializers import (
-    QuoteRequestCreateSerializer,
-    QuoteRequestListSerializer,
-    QuoteRequestDetailSerializer,
     CustomerCreateSerializer,
     CustomerListSerializer,
+    QuoteRequestCreateSerializer,
+    QuoteRequestDetailSerializer,
+    QuoteRequestListSerializer,
 )
 from .services import build_quote_options
+
 
 class CustomerCreateView(APIView):
     permission_classes = []

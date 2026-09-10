@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import List, Dict
+from typing import Dict, List
+
 
 @dataclass
 class Carrier:
@@ -9,7 +10,17 @@ class Carrier:
     per_kg: float
     eta_days: int
 
-CARRIERS = [
+
+def volumetric_weight(
+    length_cm: float,
+    width_cm: float,
+    height_cm: float,
+    factor: float = 5000.0,
+) -> float:
+    return round((length_cm * width_cm * height_cm) / factor, 2)
+
+
+CARRIERS: List[Carrier] = [
     Carrier("ally_a", "Ally Express", 115.0, 24.0, 1),
     Carrier("ally_b", "Paquetería MX", 95.0, 19.5, 2),
     Carrier("ally_c", "Global Freight", 105.0, 21.0, 2),
@@ -18,16 +29,19 @@ CARRIERS = [
     Carrier("ally_f", "Nexo Envíos", 98.0, 20.0, 2),
 ]
 
-def volumetric_weight(length_cm: float, width_cm: float, height_cm: float, factor: float = 5000.0) -> float:
-    return round((length_cm * width_cm * height_cm) / factor, 2)
 
 def score_option(price: float, eta_days: int) -> float:
     # menor score = mejor
     return round((price * 0.7) + (eta_days * 30 * 0.3), 2)
 
+
 def build_quote_options(data: Dict) -> Dict:
     real_weight = float(data["weight_kg"])
-    vol_weight = volumetric_weight(data["length_cm"], data["width_cm"], data["height_cm"])
+    vol_weight = volumetric_weight(
+        data["length_cm"],
+        data["width_cm"],
+        data["height_cm"],
+    )
     chargeable = max(real_weight, vol_weight)
 
     multiplier = 1.0
@@ -55,7 +69,6 @@ def build_quote_options(data: Dict) -> Dict:
         }
         options.append(option)
 
-    # top 3 por score
     top3 = sorted(options, key=lambda x: x["score"])[:3]
 
     return {
