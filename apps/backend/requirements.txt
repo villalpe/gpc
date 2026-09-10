@@ -10,3 +10,4 @@ sqlparse==0.6.0
 tzdata==2026.3
 ruff==0.6.9
 gunicorn==22.0.0
+dj-database-url==2.2.0
