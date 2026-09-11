@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import QuoteRequest, Customer 
+
+from .models import Customer, QuoteRequest
 
 SCOPE_CHOICES = ("nacional", "internacional")
 URGENCY_CHOICES = ("economico", "express", "prioritario")

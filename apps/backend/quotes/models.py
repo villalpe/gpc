@@ -1,5 +1,6 @@
 from django.db import models
 
+
 class Customer(models.Model):
     full_name = models.CharField(max_length=150)
     company = models.CharField(max_length=150, blank=True, default="")
@@ -18,6 +19,7 @@ class Customer(models.Model):
 
     def __str__(self):
         return f"Customer #{self.id} - {self.full_name}"
+
 
 class QuoteRequest(models.Model):
     SCOPE_CHOICES = [
@@ -52,7 +54,13 @@ class QuoteRequest(models.Model):
     dest_country = models.CharField(max_length=80)
     dest_zip = models.CharField(max_length=12)
     dest_city = models.CharField(max_length=80, blank=True, default="")
-    customer = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, blank=True, related_name="quotes")
+    customer = models.ForeignKey(
+        Customer,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="quotes",
+    )
 
     # Paquete
     weight_kg = models.DecimalField(max_digits=10, decimal_places=2)
@@ -71,7 +79,9 @@ class QuoteRequest(models.Model):
     notes = models.TextField(blank=True, default="")
 
     # Resultado de cotización (snapshot para auditoría/demo)
-    result_weight = models.JSONField(default=dict)   # {real_kg, volumetric_kg, chargeable_kg, volumetric_factor}
+    result_weight = models.JSONField(
+        default=dict
+    )  # {real_kg, volumetric_kg, chargeable_kg, volumetric_factor}
     result_options = models.JSONField(default=list)  # top 3 options
 
     created_at = models.DateTimeField(auto_now_add=True)

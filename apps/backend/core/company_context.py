@@ -11,7 +11,6 @@ def get_active_company_id(request):
         raise ValidationError("Missing X-Company-Id header")
 
     try:
-        # normaliza y valida formato UUID
         company_id = str(uuid.UUID(str(raw_company_id)))
     except (ValueError, TypeError):
         raise ValidationError("Invalid X-Company-Id format")
@@ -20,6 +19,9 @@ def get_active_company_id(request):
 
 
 def require_company_membership(request):
+    if not request.user or not request.user.is_authenticated:
+        raise PermissionDenied("Authentication required")
+
     company_id = get_active_company_id(request)
 
     is_member = Membership.objects.filter(

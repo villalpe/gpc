@@ -1,3 +1,4 @@
+from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -24,8 +25,20 @@ def admin_ping(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def company_scope_ping(request):
-    company_id = require_company_membership(request)
-    return Response({"ok": True, "company_id": company_id})
+    try:
+        company_id = require_company_membership(request)
+    except ValidationError as e:
+        return Response(
+            {"detail": str(e.detail[0]) if hasattr(e, "detail") else str(e)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    except PermissionDenied:
+        return Response(
+            {"detail": "You do not belong to this company"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    return Response({"ok": True, "company_id": company_id}, status=status.HTTP_200_OK)
 
 
 @api_view(["GET"])
@@ -82,7 +95,6 @@ def inventory_adjust(request):
             )
             return Response({"detail": "Forbidden"}, status=403)
 
-        # Ajuste (dummy en esta etapa)
         log_event(
             request=request,
             action="inventory.adjust",
