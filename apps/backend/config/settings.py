@@ -130,3 +130,8 @@ CSRF_TRUSTED_ORIGINS = config(
     "CSRF_TRUSTED_ORIGINS",
     default="http://localhost:3000,http://127.0.0.1:3000",
 ).split(",")
+
+FEDEX_BASE_URL = config("FEDEX_BASE_URL", default="")
+FEDEX_API_KEY = config("FEDEX_API_KEY", default="")
+FEDEX_SECRET_KEY = config("FEDEX_SECRET_KEY", default="")
+FEDEX_TIMEOUT_SECONDS = config("FEDEX_TIMEOUT_SECONDS", default=20, cast=int)

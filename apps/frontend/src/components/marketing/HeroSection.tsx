@@ -26,25 +26,25 @@ export function HeroSection() {
   return (
     <section className="relative isolate overflow-hidden text-white">
       {/* Fondo responsive */}
-      <div className="absolute inset-0 -z-20 brightness-[1.04] contrast-[1.03] saturate-[1.04]">
+      <div className="absolute inset-0 -z-10 bg-gradient-to-r from-slate-950/65 via-slate-900/45 to-slate-900/25">
         {/* Mobile */}
         <Image
-          src="/images/imageHero640.jpg"
+          src="/images/imageHero13.jpg"
           alt="Operación logística de carga Global Pack Center"
           fill
           priority
           sizes="(max-width: 767px) 100vw"
-          className="object-cover object-[60%_20%] md:hidden"
+          className="object-cover object-[68%_35%] md:hidden"
         />
 
         {/* Desktop */}
         <Image
-          src="/images/imageHero9.jpg"
+          src="/images/imageHero12.jpg"
           alt="Operación logística de carga Global Pack Center"
           fill
           priority
           sizes="(min-width: 768px) 100vw"
-          className="hidden object-contain object-center md:block"
+          className="hidden md:block object-cover object-center"
         />
       </div>
 
@@ -85,7 +85,7 @@ export function HeroSection() {
 
           <div className="pointer-events-auto mt-7 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:items-center sm:gap-4">
             <Link
-              href="/contacto"
+              href="/contact"
               className="inline-flex items-center justify-center rounded-xl bg-[var(--primary)] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[var(--primary-dark)]"
             >
               Solicitar asesoría

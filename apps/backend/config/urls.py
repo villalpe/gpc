@@ -32,4 +32,6 @@ urlpatterns = [
     path("api/modules/inventory/adjust/", inventory_adjust, name="inventory_adjust"),
 
     path("api/quotes/", include("quotes.urls")),
+
+    path("api/integrations/", include("integrations.urls")),
 ]
