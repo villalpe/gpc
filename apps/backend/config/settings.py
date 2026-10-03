@@ -135,3 +135,8 @@ FEDEX_BASE_URL = config("FEDEX_BASE_URL", default="")
 FEDEX_API_KEY = config("FEDEX_API_KEY", default="")
 FEDEX_SECRET_KEY = config("FEDEX_SECRET_KEY", default="")
 FEDEX_TIMEOUT_SECONDS = config("FEDEX_TIMEOUT_SECONDS", default=20, cast=int)
+
+SKYDROPX_BASE_URL = config("SKYDROPX_BASE_URL", default="")
+SKYDROPX_API_KEY = config("SKYDROPX_API_KEY", default="")
+SKYDROPX_SECRET_KEY = config("SKYDROPX_SECRET_KEY", default="")
+SKYDROPX_TIMEOUT_SECONDS = config("SKYDROPX_TIMEOUT_SECONDS", default=20, cast=int)
