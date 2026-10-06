@@ -1,9 +1,17 @@
+from django.conf import settings
 from django.db import models
 
 
 class Customer(models.Model):
+    company = models.ForeignKey(
+        "companies.Company",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="quote_customers",
+    )
     full_name = models.CharField(max_length=150)
-    company = models.CharField(max_length=150, blank=True, default="")
+    company_name = models.CharField(max_length=150, blank=True, default="")
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=30)
 
@@ -40,18 +48,18 @@ class QuoteRequest(models.Model):
     ]
 
     # Contacto
-    full_name = models.CharField(max_length=150)
-    company = models.CharField(max_length=150, blank=True, default="")
-    email = models.EmailField()
-    phone = models.CharField(max_length=30)
+    full_name = models.CharField(max_length=150, blank=True, default="")
+    company_name = models.CharField(max_length=150, blank=True, default="")
+    email = models.EmailField(blank=True, default="")
+    phone = models.CharField(max_length=30, blank=True, default="")
 
     # Envío
-    scope = models.CharField(max_length=20, choices=SCOPE_CHOICES)
-    service_type = models.CharField(max_length=50)
+    scope = models.CharField(max_length=20, choices=SCOPE_CHOICES, default="nacional")
+    service_type = models.CharField(max_length=50, blank=True, default="")
 
-    origin_country = models.CharField(max_length=80)
+    origin_country = models.CharField(max_length=80, default="MX")
     origin_zip = models.CharField(max_length=12)
-    dest_country = models.CharField(max_length=80)
+    dest_country = models.CharField(max_length=80, default="MX")
     dest_zip = models.CharField(max_length=12)
     dest_city = models.CharField(max_length=80, blank=True, default="")
     customer = models.ForeignKey(
@@ -63,22 +71,56 @@ class QuoteRequest(models.Model):
     )
 
     # Paquete
-    weight_kg = models.DecimalField(max_digits=10, decimal_places=2)
-    length_cm = models.DecimalField(max_digits=10, decimal_places=2)
-    width_cm = models.DecimalField(max_digits=10, decimal_places=2)
-    height_cm = models.DecimalField(max_digits=10, decimal_places=2)
+    weight_kg = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    length_cm = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    width_cm = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    height_cm = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
     pieces = models.PositiveIntegerField(default=1)
 
     declared_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     requires_insurance = models.BooleanField(default=False)
 
-    urgency = models.CharField(max_length=20, choices=URGENCY_CHOICES)
-    frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES)
+    urgency = models.CharField(max_length=20, choices=URGENCY_CHOICES, blank=True, default="")
+    frequency = models.CharField(
+        max_length=20, choices=FREQUENCY_CHOICES, blank=True, default=""
+    )
     pickup = models.BooleanField(default=True)
 
     notes = models.TextField(blank=True, default="")
 
-    # Resultado de cotización (snapshot para auditoría/demo)
+    # Multi-tenant / proveedor
+    company = models.ForeignKey(
+        "companies.Company",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="quote_requests",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="quote_requests",
+    )
+    provider = models.CharField(max_length=30, blank=True, default="")
+    provider_quotation_id = models.CharField(max_length=100, blank=True, default="")
+
+    origin_state = models.CharField(max_length=80, blank=True, default="")
+    origin_city = models.CharField(max_length=80, blank=True, default="")
+    origin_area = models.CharField(max_length=120, blank=True, default="")
+    dest_state = models.CharField(max_length=80, blank=True, default="")
+    dest_area = models.CharField(max_length=120, blank=True, default="")
+
+    # Resultado de cotización (snapshot normalizado, incluye precios; solo staff)
     result_weight = models.JSONField(
         default=dict
     )  # {real_kg, volumetric_kg, chargeable_kg, volumetric_factor}
@@ -91,3 +133,17 @@ class QuoteRequest(models.Model):
 
     def __str__(self):
         return f"QuoteRequest #{self.id} - {self.full_name} ({self.scope})"
+
+
+class QuoteParcel(models.Model):
+    quote = models.ForeignKey(QuoteRequest, on_delete=models.CASCADE, related_name="parcels")
+    length_cm = models.PositiveIntegerField()
+    width_cm = models.PositiveIntegerField()
+    height_cm = models.PositiveIntegerField()
+    weight_kg = models.DecimalField(max_digits=10, decimal_places=3)
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"QuoteParcel #{self.id} (quote {self.quote_id})"

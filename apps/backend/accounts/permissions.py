@@ -7,6 +7,13 @@ from .models import Membership, Role
 MODULE_ROLE_MATRIX = {
     "audit": {Role.SUPERADMIN, Role.ADMIN_COMPANY, Role.VIEWER},
     "inventory": {Role.SUPERADMIN, Role.ADMIN_COMPANY, Role.OPERATOR},
+    "quotes": {
+        Role.SUPERADMIN,
+        Role.ADMIN_COMPANY,
+        Role.OPERATOR,
+        Role.VIEWER,
+        Role.CLIENT,
+    },
 }
 
 class IsSuperAdmin(BasePermission):
@@ -53,4 +60,8 @@ class CanAccessAudit(HasModuleAccess):
 
 
 class CanAccessInventory(HasModuleAccess):
-    module = "inventory"        
+    module = "inventory"
+
+
+class CanAccessQuotes(HasModuleAccess):
+    module = "quotes"
