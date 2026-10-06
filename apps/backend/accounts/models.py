@@ -38,6 +38,7 @@ class Role(models.TextChoices):
     ADMIN_COMPANY = "ADMIN_COMPANY", "Admin Empresa"
     OPERATOR = "OPERATOR", "Operador"
     VIEWER = "VIEWER", "Viewer"
+    CLIENT = "CLIENT", "Cliente"
 
 
 class User(AbstractUser):

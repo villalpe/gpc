@@ -75,6 +75,9 @@ class FeaturePermissionsAPITests(APITestCase):
                 "audit.read",
                 "users.invite",
                 "users.disable",
+                "quotes.read",
+                "quotes.create",
+                "quotes.view_price",
             ]),
         )
 
@@ -90,6 +93,9 @@ class FeaturePermissionsAPITests(APITestCase):
                 "inventory.adjust",
                 "audit.read",
                 "users.invite",
+                "quotes.read",
+                "quotes.create",
+                "quotes.view_price",
             ]),
         )
 
@@ -102,6 +108,9 @@ class FeaturePermissionsAPITests(APITestCase):
             sorted([
                 "inventory.read",
                 "inventory.write",
+                "quotes.read",
+                "quotes.create",
+                "quotes.view_price",
             ]),
         )
 
@@ -114,6 +123,8 @@ class FeaturePermissionsAPITests(APITestCase):
             sorted([
                 "inventory.read",
                 "audit.read",
+                "quotes.read",
+                "quotes.create",
             ]),
         )
 

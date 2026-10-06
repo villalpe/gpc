@@ -1,29 +1,55 @@
-from django.db import IntegrityError
+import json
+
+from django.core.serializers.json import DjangoJSONEncoder
+from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Customer, QuoteRequest
+from accounts.permission_service import can_view_price
+from accounts.permissions import CanAccessQuotes
+from core.company_context import get_active_company_id
+from integrations.providers.skydropx.client import (
+    SkydropxClient,
+    SkydropxError,
+    SkydropxTimeoutError,
+)
+from integrations.providers.skydropx.mappers import map_quotation_rates
+
+from .models import Customer, QuoteParcel, QuoteRequest
 from .serializers import (
     CustomerCreateSerializer,
     CustomerListSerializer,
-    QuoteRequestCreateSerializer,
-    QuoteRequestDetailSerializer,
-    QuoteRequestListSerializer,
+    QuoteOutputSerializer,
+    SkydropxQuoteInputSerializer,
 )
-from .services import build_quote_options
+from .services import parcels_weight_summary
 
 
-class CustomerCreateView(APIView):
-    permission_classes = []
+class QuotesBaseView(APIView):
+    permission_classes = [IsAuthenticated, CanAccessQuotes]
 
+    def _company_id(self, request):
+        return get_active_company_id(request)
+
+    def _serialize(self, request, company_id, obj, many=False):
+        return QuoteOutputSerializer(
+            obj,
+            many=many,
+            context={"show_price": can_view_price(request.user, company_id)},
+        ).data
+
+
+class CustomerCreateView(QuotesBaseView):
     def post(self, request):
+        company_id = self._company_id(request)
         serializer = CustomerCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         try:
-            customer = serializer.save()
+            customer = serializer.save(company_id=company_id)
         except IntegrityError:
             return Response(
                 {"message": "Ya existe un cliente con ese email.", "data": None},
@@ -39,80 +65,91 @@ class CustomerCreateView(APIView):
         )
 
 
-class CustomerListView(APIView):
-    permission_classes = []
-
+class CustomerListView(QuotesBaseView):
     def get(self, request):
+        company_id = self._company_id(request)
         email = request.query_params.get("email")
-        qs = Customer.objects.all()
+        qs = Customer.objects.filter(company_id=company_id)
         if email:
             qs = qs.filter(email__iexact=email.strip())
         data = CustomerListSerializer(qs[:20], many=True).data
         return Response({"message": "Customers retrieved successfully.", "data": data}, status=200)
 
-class QuoteRequestView(APIView):
-    permission_classes = []
 
+class SkydropxQuoteView(QuotesBaseView):
     def post(self, request):
-        serializer = QuoteRequestCreateSerializer(data=request.data)
+        company_id = self._company_id(request)
+        serializer = SkydropxQuoteInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        payload = serializer.to_skydropx_payload()
 
-        customer = None
-        customer_id = data.get("customer_id")
-        if customer_id:
-            customer = get_object_or_404(Customer, id=customer_id)
+        try:
+            client = SkydropxClient()
+            created = client.create_quotation(payload)
+            quotation_id = created.get("id")
+            if not quotation_id:
+                raise SkydropxError("missing quotation id")
+            raw = client.poll_quotation_until_completed(quotation_id)
+        except SkydropxTimeoutError:
+            return Response(
+                {"message": "La cotización tardó demasiado. Intenta de nuevo.", "data": None},
+                status=status.HTTP_504_GATEWAY_TIMEOUT,
+            )
+        except SkydropxError:
+            return Response(
+                {"message": "Error al cotizar con el proveedor.", "data": None},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
-        result = build_quote_options(data)
+        options = map_quotation_rates(raw)
+        snapshot = json.loads(json.dumps(options, cls=DjangoJSONEncoder))
+        origin, dest = data["origin"], data["destination"]
 
-        quote = QuoteRequest.objects.create(
-            customer=customer,  # <- CLAVE
-            full_name=data["full_name"],
-            company=data.get("company", ""),
-            email=data["email"],
-            phone=data["phone"],
-            scope=data["scope"],
-            service_type=data["service_type"],
-            origin_country=data["origin_country"],
-            origin_zip=data["origin_zip"],
-            dest_country=data["dest_country"],
-            dest_zip=data["dest_zip"],
-            dest_city=data.get("dest_city", ""),
-            weight_kg=data["weight_kg"],
-            length_cm=data["length_cm"],
-            width_cm=data["width_cm"],
-            height_cm=data["height_cm"],
-            pieces=data["pieces"],
-            declared_value=data.get("declared_value", 0),
-            requires_insurance=data.get("requires_insurance", False),
-            urgency=data["urgency"],
-            frequency=data["frequency"],
-            pickup=data.get("pickup", True),
-            notes=data.get("notes", ""),
-            result_weight=result["weight"],
-            result_options=result["options"],
-        )
+        with transaction.atomic():
+            quote = QuoteRequest.objects.create(
+                company_id=company_id,
+                created_by=request.user,
+                provider="skydropx",
+                provider_quotation_id=str(quotation_id),
+                scope="nacional",
+                origin_country=origin["country_code"],
+                origin_zip=origin["postal_code"],
+                origin_state=origin["state"],
+                origin_city=origin["city"],
+                origin_area=origin["area"],
+                dest_country=dest["country_code"],
+                dest_zip=dest["postal_code"],
+                dest_state=dest["state"],
+                dest_city=dest["city"],
+                dest_area=dest["area"],
+                result_weight=parcels_weight_summary(data["parcels"]),
+                result_options=snapshot,
+            )
+            QuoteParcel.objects.bulk_create(
+                QuoteParcel(
+                    quote=quote,
+                    length_cm=p["length"],
+                    width_cm=p["width"],
+                    height_cm=p["height"],
+                    weight_kg=p["weight"],
+                )
+                for p in data["parcels"]
+            )
 
         return Response(
             {
-                "message": "Quote request processed successfully.",
-                "data": {
-                    "id": quote.id,
-                    "customer_id": quote.customer_id,  # <- agrégalo
-                    "weight": result["weight"],
-                    "options": result["options"],
-                    "created_at": quote.created_at,
-                },
+                "message": "Quote processed successfully.",
+                "data": self._serialize(request, company_id, quote),
             },
             status=status.HTTP_201_CREATED,
         )
 
 
-class QuoteLatestView(APIView):
-    permission_classes = []
-
+class QuoteLatestView(QuotesBaseView):
     def get(self, request):
-        latest = QuoteRequest.objects.order_by("-created_at").first()
+        company_id = self._company_id(request)
+        latest = QuoteRequest.objects.filter(company_id=company_id).order_by("-created_at").first()
         if not latest:
             return Response(
                 {"message": "No quotes available yet.", "data": None},
@@ -122,31 +159,33 @@ class QuoteLatestView(APIView):
         return Response(
             {
                 "message": "Latest quote retrieved successfully.",
-                "data": QuoteRequestDetailSerializer(latest).data,
+                "data": self._serialize(request, company_id, latest),
             },
             status=status.HTTP_200_OK,
         )
 
 
-class QuoteHistoryView(APIView):
-    permission_classes = []
-
+class QuoteHistoryView(QuotesBaseView):
     def get(self, request):
-        qs = QuoteRequest.objects.order_by("-created_at")[:50]
-        data = QuoteRequestListSerializer(qs, many=True).data
+        company_id = self._company_id(request)
+        qs = QuoteRequest.objects.filter(company_id=company_id).order_by("-created_at")[:50]
         return Response(
-            {"message": "Quote history retrieved successfully.", "data": data},
+            {
+                "message": "Quote history retrieved successfully.",
+                "data": self._serialize(request, company_id, qs, many=True),
+            },
             status=status.HTTP_200_OK,
         )
 
 
-class QuoteDetailView(APIView):
-    permission_classes = []
-
+class QuoteDetailView(QuotesBaseView):
     def get(self, request, quote_id: int):
-        quote = get_object_or_404(QuoteRequest, id=quote_id)
-        data = QuoteRequestDetailSerializer(quote).data
+        company_id = self._company_id(request)
+        quote = get_object_or_404(QuoteRequest, id=quote_id, company_id=company_id)
         return Response(
-            {"message": "Quote detail retrieved successfully.", "data": data},
+            {
+                "message": "Quote detail retrieved successfully.",
+                "data": self._serialize(request, company_id, quote),
+            },
             status=status.HTTP_200_OK,
         )

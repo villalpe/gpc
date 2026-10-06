@@ -1,5 +1,5 @@
 from datetime import datetime
-
+from decimal import Decimal, InvalidOperation
 
 SKYDROPX_TRACKING_STATUS_MAP = {
     "label_created": "label_created",
@@ -115,3 +115,68 @@ def map_skydropx_shipments_list(raw: dict) -> dict:
         "results": normalized,
         "meta": raw.get("meta", {}),
     }
+
+
+VALID_RATE_STATUSES = ("approved", "price_found_internal", "price_found_external")
+
+PRICE_FIELDS = ("price", "price_breakdown", "total_value_with_protection")
+
+
+def _to_decimal(value):
+    if value is None or value == "":
+        return None
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def map_rate(rate: dict):
+    """Normaliza una tarifa de Skydropx; regresa None si no es utilizable."""
+    if not rate or rate.get("success") is not True:
+        return None
+    if rate.get("status") not in VALID_RATE_STATUSES:
+        return None
+
+    pickup = bool(rate.get("pickup"))
+    office_pickup = bool(rate.get("office_pickup"))
+    if pickup:
+        pickup_type = "pickup"
+    elif office_pickup:
+        pickup_type = "dropoff"
+    else:
+        pickup_type = None
+
+    packaging_type = rate.get("packaging_type")
+    mode = "freight" if str(packaging_type).strip().lower() == "pallet" else "parcel"
+
+    return {
+        "rate_id": rate.get("id"),
+        "carrier": rate.get("provider_display_name"),
+        "carrier_code": rate.get("provider_name"),
+        "service": rate.get("provider_service_name"),
+        "service_code": rate.get("provider_service_code"),
+        "estimated_days": rate.get("days"),
+        "pickup_type": pickup_type,
+        "pickup_available": pickup,
+        "office_pickup_available": office_pickup,
+        "delivery_type": "ocurre" if rate.get("office_delivery") else "home",
+        "packaging_type": packaging_type,
+        "mode": mode,
+        "fulfillment_level": None,
+        "requires_origin_verification": bool(rate.get("requires_origin_verification")),
+        "price": _to_decimal(rate.get("total")),
+        "price_breakdown": {
+            "amount": _to_decimal(rate.get("amount")),
+            "vat_fee": _to_decimal(rate.get("vat_fee")),
+            "service_fee": _to_decimal(rate.get("service_fee")),
+            "extra_fees": rate.get("extra_fees") or [],
+            "currency_code": rate.get("currency_code"),
+        },
+        "total_value_with_protection": _to_decimal(rate.get("total_value_with_protection")),
+    }
+
+
+def map_quotation_rates(raw: dict) -> list:
+    options = [map_rate(r) for r in (raw or {}).get("rates", []) or []]
+    return [o for o in options if o]

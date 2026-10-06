@@ -1,15 +1,14 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from .serializers import FedexTrackRequestSerializer
 from .providers.fedex.client import FedexClient
-
-from .serializers import SkydropxTrackRequestSerializer
-from .providers.skydropx.client import SkydropxClient
 from .providers.fedex.mappers import map_fedex_tracking
+from .providers.skydropx.client import SkydropxClient
 from .providers.skydropx.mappers import map_skydropx_shipments_list
+from .serializers import FedexTrackRequestSerializer
+
 
 class FedexTrackView(APIView):
     """

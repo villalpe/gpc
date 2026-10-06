@@ -1,5 +1,19 @@
+import time
+
 import requests
 from django.conf import settings
+
+
+class SkydropxError(Exception):
+    """Base error for Skydropx client failures (never includes tokens/payloads)."""
+
+
+class SkydropxAPIError(SkydropxError):
+    pass
+
+
+class SkydropxTimeoutError(SkydropxError):
+    pass
 
 
 class SkydropxClient:
@@ -49,3 +63,47 @@ class SkydropxClient:
         resp = requests.get(url, headers=self._headers(), timeout=self.timeout)
         resp.raise_for_status()
         return resp.json()
+
+    def _request(self, method: str, path: str, json=None):
+        url = f"{self.base_url}{path}"
+        for attempt in range(2):
+            try:
+                resp = requests.request(
+                    method, url, json=json, headers=self._headers(), timeout=self.timeout
+                )
+            except requests.RequestException:
+                raise SkydropxAPIError("Skydropx request failed") from None
+            except ValueError:
+                raise SkydropxAPIError("Skydropx authentication failed") from None
+
+            if resp.status_code == 401 and attempt == 0:
+                self._token = None
+                continue
+            if not resp.ok:
+                raise SkydropxAPIError(f"Skydropx responded with HTTP {resp.status_code}")
+            try:
+                return resp.json()
+            except ValueError:
+                raise SkydropxAPIError("Skydropx returned an invalid response") from None
+        raise SkydropxAPIError("Skydropx responded with HTTP 401")
+
+    def create_quotation(self, payload: dict) -> dict:
+        return self._request("POST", "/api/v1/quotations", json=payload)
+
+    def get_quotation(self, quotation_id) -> dict:
+        return self._request("GET", f"/api/v1/quotations/{quotation_id}")
+
+    def poll_quotation_until_completed(self, quotation_id, timeout=None, interval=None) -> dict:
+        if timeout is None:
+            timeout = settings.SKYDROPX_QUOTE_POLL_TIMEOUT_SECONDS
+        if interval is None:
+            interval = settings.SKYDROPX_QUOTE_POLL_INTERVAL_SECONDS
+
+        deadline = time.monotonic() + timeout
+        while True:
+            data = self.get_quotation(quotation_id)
+            if data.get("is_completed") is True:
+                return data
+            if time.monotonic() + interval > deadline:
+                raise SkydropxTimeoutError("Skydropx quotation did not complete in time")
+            time.sleep(interval)

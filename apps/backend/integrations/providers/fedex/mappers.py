@@ -64,7 +64,9 @@ def map_fedex_tracking(raw: dict, tracking_number: str) -> dict:
         country = _safe_get(e, "scanLocation", "countryCode") or ""
         location = ", ".join([x for x in [city, state, country] if x]) or None
 
-        event_code = (e.get("derivedStatusCode") or e.get("eventType") or e.get("derivedStatus") or "").upper()
+        event_code = (
+            e.get("derivedStatusCode") or e.get("eventType") or e.get("derivedStatus") or ""
+        ).upper()
         desc = e.get("eventDescription") or e.get("derivedStatus") or e.get("exceptionDescription")
 
         events.append({

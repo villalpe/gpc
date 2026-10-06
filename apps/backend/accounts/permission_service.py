@@ -25,3 +25,7 @@ def list_permissions_for_user_company(user, company_id):
     if not role:
         return []
     return sorted(list(ROLE_PERMISSIONS.get(role, set())))
+
+
+def can_view_price(user, company_id) -> bool:
+    return has_feature_permission(user, company_id, "quotes.view_price")
