@@ -24,27 +24,73 @@ type Urgency = "economico" | "express" | "prioritario";
 type Frequency = "unico" | "semanal" | "mensual";
 
 type QuoteOption = {
+  rate_id: string;
+  carrier: string;
   carrier_code: string;
-  carrier_name: string;
-  estimated_price_mxn: number;
-  eta_days: number;
-  service_level: string;
-  score: number;
+  service: string;
+  service_code: string;
+  estimated_days: number | null;
+  pickup_type: "pickup" | "dropoff" | null;
+  pickup_available: boolean;
+  office_pickup_available: boolean;
+  delivery_type: "home" | "ocurre";
+  packaging_type: string | null;
+  mode: "parcel" | "freight";
+  fulfillment_level: string | null;
+  requires_origin_verification: boolean;
+  price?: string; // viene solo para roles con permiso
+  price_breakdown?: {
+    amount?: string | null;
+    vat_fee?: string | null;
+    service_fee?: string | null;
+    extra_fees?: Array<{
+      code: string;
+      value: number;
+      groupable?: boolean;
+      group_code?: string | null;
+    }>;
+    currency_code?: string | null;
+  };
+  total_value_with_protection?: string;
 };
 
 type QuoteResponse = {
   message: string;
   data: {
-    id?: number;
-    customer_id?: number | null;
+    id: number;
+    provider: string;
+    provider_quotation_id: string;
+    origin: {
+      country_code: string;
+      postal_code: string;
+      state: string;
+      city: string;
+      area: string;
+    };
+    destination: {
+      country_code: string;
+      postal_code: string;
+      state: string;
+      city: string;
+      area: string;
+    };
+    parcels: Array<{
+      length_cm: number;
+      width_cm: number;
+      height_cm: number;
+      weight_kg: number;
+    }>;
     weight: {
       real_kg: number;
       volumetric_kg: number;
       chargeable_kg: number;
       volumetric_factor: number;
     };
-    options: QuoteOption[];
-    created_at?: string;
+    options: {
+      parcel: QuoteOption[];
+      freight: QuoteOption[];
+    };
+    created_at: string;
   };
 };
 
@@ -54,7 +100,7 @@ export default function QuotePage() {
   // Stepper
   const [step, setStep] = useState(1);
 
-  // Contacto
+  // Contacto (se mantiene por UX, aunque backend actual de quotes no lo usa)
   const [fullName, setFullName] = useState("");
   const [company, setCompany] = useState("");
   const [email, setEmail] = useState("");
@@ -65,11 +111,17 @@ export default function QuotePage() {
   const [serviceType, setServiceType] = useState("paquete");
 
   // Ruta
-  const [originCountry, setOriginCountry] = useState("México");
+  const [originCountry, setOriginCountry] = useState("MX");
+  const [originState, setOriginState] = useState("");
+  const [originCity, setOriginCity] = useState("");
+  const [originArea, setOriginArea] = useState("");
   const [originZip, setOriginZip] = useState("");
-  const [destCountry, setDestCountry] = useState("México");
-  const [destZip, setDestZip] = useState("");
+
+  const [destCountry, setDestCountry] = useState("MX");
+  const [destState, setDestState] = useState("");
   const [destCity, setDestCity] = useState("");
+  const [destArea, setDestArea] = useState("");
+  const [destZip, setDestZip] = useState("");
 
   // Dimensiones y peso
   const [weightKg, setWeightKg] = useState("");
@@ -92,7 +144,8 @@ export default function QuotePage() {
   const [error, setError] = useState("");
 
   // Resultados
-  const [quoteOptions, setQuoteOptions] = useState<QuoteOption[]>([]);
+  const [quoteParcelOptions, setQuoteParcelOptions] = useState<QuoteOption[]>([]);
+  const [quoteFreightOptions, setQuoteFreightOptions] = useState<QuoteOption[]>([]);
   const [serverWeight, setServerWeight] = useState<QuoteResponse["data"]["weight"] | null>(null);
 
   const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email), [email]);
@@ -116,10 +169,16 @@ export default function QuotePage() {
   const isStep2Valid =
     scope.length > 0 &&
     serviceType.length > 0 &&
-    originCountry.trim().length >= 2 &&
+    originCountry.trim().toUpperCase() === "MX" &&
     originZip.trim().length >= 4 &&
-    destCountry.trim().length >= 2 &&
-    destZip.trim().length >= 4;
+    originState.trim().length >= 2 &&
+    originCity.trim().length >= 2 &&
+    originArea.trim().length >= 2 &&
+    destCountry.trim().toUpperCase() === "MX" &&
+    destZip.trim().length >= 4 &&
+    destState.trim().length >= 2 &&
+    destCity.trim().length >= 2 &&
+    destArea.trim().length >= 2;
 
   const isStep3Valid =
     Number(pieces) > 0 &&
@@ -141,7 +200,7 @@ export default function QuotePage() {
       return;
     }
     if (step === 2 && !isStep2Valid) {
-      setError("Completa origen y destino para continuar.");
+      setError("Completa origen y destino en MX (estado, ciudad, colonia y CP).");
       return;
     }
     if (step === 3 && !isStep3Valid) {
@@ -160,7 +219,8 @@ export default function QuotePage() {
     e.preventDefault();
     setSuccess(false);
     setError("");
-    setQuoteOptions([]);
+    setQuoteParcelOptions([]);
+    setQuoteFreightOptions([]);
     setServerWeight(null);
 
     if (!isValid) {
@@ -168,49 +228,63 @@ export default function QuotePage() {
       return;
     }
 
+    if (scope !== "nacional") {
+      setError("Por ahora solo está habilitada la cotización nacional (MX).");
+      return;
+    }
+
     setLoading(true);
     try {
-      const payload = {
-        customer_id: null,
-        full_name: fullName,
-        company,
-        email,
-        phone,
-        scope,
-        service_type: serviceType,
-        origin_country: originCountry,
-        origin_zip: originZip,
-        dest_country: destCountry,
-        dest_zip: destZip,
-        dest_city: destCity,
-        weight_kg: Number(weightKg),
-        length_cm: Number(lengthCm),
-        width_cm: Number(widthCm),
-        height_cm: Number(heightCm),
-        pieces: Number(pieces),
-        declared_value: declaredValue ? Number(declaredValue) : 0,
-        requires_insurance: requiresInsurance,
-        urgency,
-        frequency,
-        pickup,
-        notes,
+      const piecesCount = Number(pieces) || 1;
+      const baseParcel = {
+        length: Number(lengthCm),
+        width: Number(widthCm),
+        height: Number(heightCm),
+        weight: Number(weightKg),
+        ...(declaredValue ? { declared_value: Number(declaredValue) } : {}),
+        ...(requiresInsurance ? { package_protected: true } : {}),
       };
 
-      const apiBase = process.env.NEXT_PUBLIC_API_URL?.trim();
-      const endpoint = apiBase ? `${apiBase}/quotes/request/` : "/api/quotes/request/";
+      const parcels = Array.from({ length: piecesCount }, () => ({ ...baseParcel }));
 
-      const res = await fetch(endpoint, {
+      const payload = {
+        origin: {
+          country_code: originCountry.trim().toUpperCase(), // debe ser MX
+          postal_code: originZip.trim(),
+          state: originState.trim(),
+          city: originCity.trim(),
+          area: originArea.trim(),
+        },
+        destination: {
+          country_code: destCountry.trim().toUpperCase(), // debe ser MX
+          postal_code: destZip.trim(),
+          state: destState.trim(),
+          city: destCity.trim(),
+          area: destArea.trim(),
+        },
+        parcels,
+      };
+
+      const res = await fetch("/api/quotes/skydropx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
-      const json = (await res.json().catch(() => null)) as QuoteResponse | null;
+      const json = (await res.json().catch(() => null)) as QuoteResponse | { message?: string; detail?: string } | null;
 
-      if (!res.ok) throw new Error(json?.message || "No se pudo procesar la cotización.");
+      if (!res.ok) {
+        const msg =
+          (json && "message" in json && json.message) ||
+          (json && "detail" in json && json.detail) ||
+          "No se pudo procesar la cotización.";
+        throw new Error(msg);
+      }
 
-      setQuoteOptions(json?.data?.options ?? []);
-      setServerWeight(json?.data?.weight ?? null);
+      const data = (json as QuoteResponse).data;
+      setQuoteParcelOptions(data?.options?.parcel ?? []);
+      setQuoteFreightOptions(data?.options?.freight ?? []);
+      setServerWeight(data?.weight ?? null);
       setSuccess(true);
       setStep(4);
     } catch (err) {
@@ -219,6 +293,13 @@ export default function QuotePage() {
       setLoading(false);
     }
   }
+
+  function formatPrice(opt: QuoteOption) {
+    if (!opt.price) return "Precio disponible al solicitar";
+    const n = Number(opt.price);
+    if (Number.isNaN(n)) return `${opt.price} MXN`;
+    return `$${n.toFixed(2)} MXN`;
+    }
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900 dark:bg-[#030712] dark:text-white">
@@ -319,7 +400,7 @@ export default function QuotePage() {
             {step === 2 && (
               <div className="grid gap-4 md:grid-cols-2">
                 <h3 className="md:col-span-2 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-white/60">
-                  2. Perfil del envío y ruta
+                  2. Perfil del envío y ruta (solo MX)
                 </h3>
                 <Select
                   label="Tipo de envío *"
@@ -327,7 +408,7 @@ export default function QuotePage() {
                   onChange={setScope}
                   options={[
                     { label: "Nacional", value: "nacional" },
-                    { label: "Internacional", value: "internacional" },
+                    { label: "Internacional (próximamente)", value: "internacional" },
                   ]}
                 />
                 <Select
@@ -341,11 +422,19 @@ export default function QuotePage() {
                     { label: "Carga consolidada", value: "carga_consolidada" },
                   ]}
                 />
-                <Input label="País origen *" value={originCountry} onChange={setOriginCountry} placeholder="México" />
-                <Input label="CP origen *" value={originZip} onChange={setOriginZip} placeholder="01000" />
-                <Input label="País destino *" value={destCountry} onChange={setDestCountry} placeholder="México / USA / ..." />
+
+                <Input label="País origen (ISO) *" value={originCountry} onChange={setOriginCountry} placeholder="MX" />
+                <Input label="CP origen *" value={originZip} onChange={setOriginZip} placeholder="64000" />
+                <Input label="Estado origen *" value={originState} onChange={setOriginState} placeholder="Nuevo León" />
+                <Input label="Ciudad origen *" value={originCity} onChange={setOriginCity} placeholder="Monterrey" />
+                <Input label="Colonia/Área origen *" value={originArea} onChange={setOriginArea} placeholder="Centro" />
+
+                <Input label="País destino (ISO) *" value={destCountry} onChange={setDestCountry} placeholder="MX" />
                 <Input label="CP destino *" value={destZip} onChange={setDestZip} placeholder="44100" />
-                <Input label="Ciudad destino" value={destCity} onChange={setDestCity} placeholder="Guadalajara" />
+                <Input label="Estado destino *" value={destState} onChange={setDestState} placeholder="Jalisco" />
+                <Input label="Ciudad destino *" value={destCity} onChange={setDestCity} placeholder="Guadalajara" />
+                <Input label="Colonia/Área destino *" value={destArea} onChange={setDestArea} placeholder="Americana" />
+
                 <Input label="Piezas *" value={pieces} onChange={setPieces} placeholder="1" type="number" />
               </div>
             )}
@@ -398,7 +487,7 @@ export default function QuotePage() {
                     onChange={(e) => setPickup(e.target.checked)}
                     className="h-4 w-4 rounded border-slate-300"
                   />
-                  Recolección a domicilio
+                  Recolección a domicilio (preferencia)
                 </label>
               </div>
             )}
@@ -411,7 +500,7 @@ export default function QuotePage() {
 
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm dark:border-white/15 dark:bg-white/[0.04]">
                   <p><strong>Contacto:</strong> {fullName} · {email} · {phone}</p>
-                  <p><strong>Ruta:</strong> {originCountry} ({originZip}) → {destCountry} ({destZip})</p>
+                  <p><strong>Ruta:</strong> {originCity} ({originZip}) → {destCity} ({destZip})</p>
                   <p><strong>Peso cobrable estimado:</strong> {chargeableWeight.toFixed(2)} kg</p>
                 </div>
 
@@ -490,47 +579,79 @@ export default function QuotePage() {
               </div>
             )}
 
-            {quoteOptions.length > 0 && (
-              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/15 dark:bg-white/[0.04]">
+            {(quoteParcelOptions.length > 0 || quoteFreightOptions.length > 0) && (
+              <div className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/15 dark:bg-white/[0.04]">
                 <h4 className="flex items-center gap-2 text-base font-bold">
                   <BadgeDollarSign className="h-4 w-4 text-[#C1374A]" />
-                  Top opciones recomendadas
+                  Opciones de cotización
                 </h4>
 
-                <div className="mt-3 grid gap-3 md:grid-cols-3">
-                  {quoteOptions.map((opt, idx) => (
-                    <article
-                      key={opt.carrier_code}
-                      className={`rounded-xl border p-3 ${
-                        idx === 0
-                          ? "border-[#C1374A]/40 bg-white dark:border-[#FF8FA1]/45 dark:bg-white/[0.08]"
-                          : "border-slate-200 bg-white dark:border-white/15 dark:bg-white/[0.06]"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-slate-500 dark:text-white/60">Opción #{idx + 1}</p>
-                        {idx === 0 && (
-                          <span className="rounded-full bg-[#C1374A]/10 px-2 py-0.5 text-[10px] font-semibold text-[#C1374A] dark:text-[#FF9AAA]">
-                            Recomendada
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-1 text-sm font-semibold">{opt.carrier_name}</p>
-                      <p className="mt-2 text-lg font-bold text-[#C1374A]">
-                        ${opt.estimated_price_mxn.toFixed(2)} MXN
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-white/60">
-                        Entrega estimada: {opt.eta_days} día(s)
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-white/60">
-                        Servicio: {opt.service_level}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-white/60">
-                        Score: {opt.score.toFixed(2)}
-                      </p>
-                    </article>
-                  ))}
-                </div>
+                {/* Paquetería */}
+                {quoteParcelOptions.length > 0 && (
+                  <div>
+                    <h5 className="mb-2 text-sm font-semibold">Paquetería</h5>
+                    <div className="grid gap-3 md:grid-cols-3">
+                      {quoteParcelOptions.map((opt, idx) => (
+                        <article
+                          key={opt.rate_id}
+                          className={`rounded-xl border p-3 ${
+                            idx === 0
+                              ? "border-[#C1374A]/40 bg-white dark:border-[#FF8FA1]/45 dark:bg-white/[0.08]"
+                              : "border-slate-200 bg-white dark:border-white/15 dark:bg-white/[0.06]"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-slate-500 dark:text-white/60">Opción #{idx + 1}</p>
+                            {idx === 0 && (
+                              <span className="rounded-full bg-[#C1374A]/10 px-2 py-0.5 text-[10px] font-semibold text-[#C1374A] dark:text-[#FF9AAA]">
+                                Recomendada
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-1 text-sm font-semibold">{opt.carrier}</p>
+                          <p className="mt-1 text-xs text-slate-500 dark:text-white/60">{opt.service}</p>
+                          <p className="mt-2 text-lg font-bold text-[#C1374A]">
+                            {formatPrice(opt)}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-white/60">
+                            Entrega estimada: {opt.estimated_days ?? "-"} día(s)
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-white/60">
+                            Entrega: {opt.delivery_type === "ocurre" ? "Sucursal (ocurre)" : "Domicilio"}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-white/60">
+                            Recolección: {opt.pickup_available ? "Disponible" : "No disponible"}
+                          </p>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Carga */}
+                {quoteFreightOptions.length > 0 && (
+                  <div>
+                    <h5 className="mb-2 text-sm font-semibold">Carga</h5>
+                    <div className="grid gap-3 md:grid-cols-3">
+                      {quoteFreightOptions.map((opt, idx) => (
+                        <article
+                          key={opt.rate_id}
+                          className="rounded-xl border border-slate-200 bg-white p-3 dark:border-white/15 dark:bg-white/[0.06]"
+                        >
+                          <p className="text-xs text-slate-500 dark:text-white/60">Opción #{idx + 1}</p>
+                          <p className="mt-1 text-sm font-semibold">{opt.carrier}</p>
+                          <p className="mt-1 text-xs text-slate-500 dark:text-white/60">{opt.service}</p>
+                          <p className="mt-2 text-lg font-bold text-[#C1374A]">
+                            {formatPrice(opt)}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-white/60">
+                            Entrega estimada: {opt.estimated_days ?? "-"} día(s)
+                          </p>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </form>

@@ -10,7 +10,6 @@ const navItems = [
   { label: "Nosotros", href: "/nosotros" },
   { label: "Servicios", href: "/servicios" },
   { label: "Contacto", href: "/contact" },
-  { label: "Cotización", href: "/solicitar-cotizacion" },
 ];
 
 export function SiteHeader() {
