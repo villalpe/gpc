@@ -13,6 +13,9 @@ import {
   ClipboardList,
   ShieldCheck,
   LogOut,
+  Package,
+  Boxes,
+  Globe2,
 } from "lucide-react";
 
 import { apiFetch, ApiError } from "@/lib/apiFetch";
@@ -34,6 +37,7 @@ type NavItem = {
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   requiredPerms?: string[];
+  soon?: boolean; // "Próximamente"
 };
 
 type NavSection = {
@@ -48,6 +52,15 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
       { label: "Cotizar y crear", href: "/solicitar-cotizacion", icon: Calculator, requiredPerms: ["quotes.create"] },
+    ],
+  },
+  {
+    title: "Rastreos",
+    items: [
+      { label: "DHL", href: "/rastreo/dhl", icon: Truck },
+      { label: "Skydropx", href: "/rastreo/skydropx", icon: Package, soon: true },
+      { label: "FedEx", href: "/rastreo/fedex", icon: Boxes },
+      { label: "Cargobase", href: "/rastreo/cargobase", icon: Globe2, soon: true },
     ],
   },
   {
@@ -135,8 +148,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthzProvider permissions={permissions} loading={loading}>
       <div className="min-h-screen bg-slate-100 dark:bg-[#030712]">
-        <div className="mx-auto flex max-w-7xl">
-          <aside className="w-80 border-r border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-[#0B1220]">
+        <div className="flex">
+          <aside className="w-60 shrink-0 border-r border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-[#0B1220]">
             <div className="mb-4">
               <p className="text-xs uppercase tracking-[0.14em] text-slate-500 dark:text-white/60">
                 Panel autenticado
@@ -156,12 +169,31 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <div className="space-y-1">
                     {section.items.map((item) => {
                       const Icon = item.icon;
-                      const active = pathname === item.href;
+
+                      if (item.soon) {
+                        return (
+                          <span
+                            key={item.href}
+                            aria-disabled="true"
+                            className="flex cursor-not-allowed items-center justify-between rounded-xl px-3 py-2 text-sm text-slate-400 dark:text-white/40"
+                          >
+                            <span className="flex items-center gap-2">
+                              <Icon className="h-4 w-4" />
+                              {item.label}
+                            </span>
+                            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-white/10 dark:text-white/60">
+                              Próximamente
+                            </span>
+                          </span>
+                        );
+                      }
+
+                      const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
                       const allowed = hasAllPerms(permissions ?? [], item.requiredPerms);
 
                       return (
                         <Link
-                          key={item.href}
+                          key={`${section.title}-${item.href}`}
                           href={allowed ? item.href : "#"}
                           onClick={(e) => {
                             if (!allowed) e.preventDefault();
@@ -200,7 +232,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </button>
           </aside>
 
-          <main className="flex-1 p-4">{children}</main>
+          <main className="min-w-0 flex-1 p-4">{children}</main>
         </div>
       </div>
     </AuthzProvider>
