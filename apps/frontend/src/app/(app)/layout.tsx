@@ -60,7 +60,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "DHL", href: "/rastreo/dhl", icon: Truck },
       { label: "Skydropx", href: "/rastreo/skydropx", icon: Package, soon: true },
       { label: "FedEx", href: "/rastreo/fedex", icon: Boxes },
-      { label: "Cargobase", href: "/rastreo/cargobase", icon: Globe2, soon: true },
+      { label: "Cargobase", href: "/rastreo/cargobase", icon: Globe2 },
     ],
   },
   {
