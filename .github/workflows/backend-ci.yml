@@ -6,11 +6,10 @@ on:
     paths:
       - "apps/backend/**"
       - ".github/workflows/backend-ci.yml"
+  # No path filter on pull_request: the required "test-backend" check must always
+  # be reported, otherwise frontend-only PRs stay "Expected" forever.
   pull_request:
     branches: ["master", "main", "develop"]
-    paths:
-      - "apps/backend/**"
-      - ".github/workflows/backend-ci.yml"
 
 jobs:
   test-backend:
