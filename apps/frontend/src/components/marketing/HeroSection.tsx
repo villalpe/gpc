@@ -5,7 +5,7 @@ import Image from "next/image";
 import { CheckCircle2 } from "lucide-react";
 
 const trustPoints = [
-  "Más de 15 años de experiencia en logística de carga",
+  "Más de 15 años de experiencia en logística de paquetería y carga",
   "Cobertura nacional con aliados estratégicos de transporte",
   "Optimización de costos, rutas y tiempos de operación",
 ];
@@ -40,7 +40,7 @@ export function HeroSection() {
         {/* Desktop */}
         <Image
           src="/images/imageHero12.jpg"
-          alt="Operación logística de carga Global Pack Center"
+          alt="Operación logística de paquetería y carga Global Pack Center"
           fill
           priority
           sizes="(min-width: 768px) 100vw"
@@ -60,18 +60,18 @@ export function HeroSection() {
             <span className="bg-gradient-to-r from-[#FF5A6B] via-[#FF3D53] to-[#C9CED6] bg-clip-text text-transparent">
               Global Pack Center
             </span>
-            <span className="text-white/90"> · Soluciones logísticas de carga</span>
+            <span className="text-white/90"> · Soluciones logísticas de paquetería y carga</span>
           </p>
 
           <h1 className="mt-5 text-4xl font-extrabold leading-[1.08] tracking-tight text-white [text-shadow:0_2px_8px_rgba(0,0,0,0.24)] sm:text-5xl md:mt-6 md:text-4xl lg:text-5xl">
-            Tu operación de carga,{" "}
+            Tu operación de paquetería y carga,{" "}
             <span className="text-[#E94A67] [text-shadow:0_2px_8px_rgba(0,0,0,0.20)]">
               más eficiente, rentable y confiable.
             </span>
           </h1>
 
           <p className="mt-5 max-w-2xl text-base leading-relaxed text-white/90 sm:text-lg md:mt-6 md:text-lg">
-            Soluciones de carga y logística B2B a la medida, con cobertura nacional e internacional y seguimiento personalizado.
+            Soluciones de paquetería y logística B2B a la medida, con cobertura nacional e internacional y seguimiento personalizado.
           </p>
 
           <ul className="mt-5 space-y-2 md:mt-6">

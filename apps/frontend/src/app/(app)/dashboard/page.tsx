@@ -43,12 +43,14 @@ type PermissionsResponse = {
 };
 
 type QuoteOption = {
+  rate_id?: string;
+  carrier: string;
   carrier_code: string;
-  carrier_name: string;
-  estimated_price_mxn: number;
-  eta_days: number;
-  service_level?: string;
-  score?: number;
+  service?: string;
+  service_code?: string;
+  estimated_days: number | null;
+  mode?: "parcel" | "freight";
+  price?: string; // solo para roles con permiso
 };
 
 type QuoteWeight = {
@@ -58,43 +60,103 @@ type QuoteWeight = {
   volumetric_factor?: number;
 };
 
+type QuoteAddress = {
+  country_code?: string;
+  postal_code?: string;
+  state?: string;
+  city?: string;
+  area?: string;
+};
+
 type QuoteItem = {
   id: number;
-  full_name: string;
-  company?: string;
-  email: string;
-  phone: string;
-  scope: "nacional" | "internacional";
-  origin_country: string;
-  origin_zip: string;
-  dest_country: string;
-  dest_zip: string;
-  dest_city?: string;
+  provider?: string;
+  provider_quotation_id?: string;
+  origin: QuoteAddress;
+  destination: QuoteAddress;
+  weight: QuoteWeight | null;
+  options: { parcel: QuoteOption[]; freight: QuoteOption[] };
+  created_at: string;
+  // Campos legacy (opcionales)
+  full_name?: string;
+  email?: string;
+  phone?: string;
   notes?: string;
   customer_id?: number | null;
-  customer_pickup_address_line1?: string;
+  customer_pickup_address_line1?: string | null;
   customer_pickup_city?: string;
   customer_pickup_zip?: string;
-  customer_pickup_country?: string;  
-  result_weight: QuoteWeight;
-  result_options: QuoteOption[];
-  created_at: string;
+  customer_pickup_country?: string;
 };
 
 type LatestQuoteApiResponse = {
   message: string;
-  data: QuoteItem | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data: any | null;
 };
 
 type QuoteHistoryApiResponse = {
   message: string;
-  data: QuoteItem[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data: any[];
 };
 
 type QuoteDetailApiResponse = {
   message: string;
-  data: QuoteItem;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data: any;
 };
+
+/* ---------- Normalización (formato nuevo + legacy) ---------- */
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function normalizeLegacyOption(o: any): QuoteOption {
+  return {
+    carrier: o.carrier ?? o.carrier_name ?? "-",
+    carrier_code: o.carrier_code ?? "",
+    service: o.service ?? o.service_level,
+    estimated_days: o.estimated_days ?? o.eta_days ?? null,
+    price:
+      o.price ??
+      (typeof o.estimated_price_mxn === "number" ? String(o.estimated_price_mxn) : undefined),
+    rate_id: o.rate_id,
+    mode: o.mode,
+  };
+}
+
+function normalizeQuote(raw: any): QuoteItem {
+  let parcel: QuoteOption[] = [];
+  let freight: QuoteOption[] = [];
+
+  if (Array.isArray(raw?.options)) {
+    parcel = raw.options.map(normalizeLegacyOption);
+  } else if (raw?.options) {
+    parcel = (raw.options.parcel ?? []).map(normalizeLegacyOption);
+    freight = (raw.options.freight ?? []).map(normalizeLegacyOption);
+  } else if (Array.isArray(raw?.result_options)) {
+    parcel = raw.result_options.map(normalizeLegacyOption);
+  }
+
+  return {
+    ...raw,
+    id: raw.id,
+    origin: raw.origin ?? {
+      country_code: raw.origin_country,
+      postal_code: raw.origin_zip,
+    },
+    destination: raw.destination ?? {
+      country_code: raw.dest_country,
+      postal_code: raw.dest_zip,
+      city: raw.dest_city,
+    },
+    weight: raw.weight ?? raw.result_weight ?? null,
+    options: { parcel, freight },
+    created_at: raw.created_at,
+  } as QuoteItem;
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+/* ---------- Helpers ---------- */
 
 function setActiveCompanyCookie(companyId: string) {
   document.cookie = `active_company_id=${encodeURIComponent(companyId)}; Path=/; SameSite=Lax`;
@@ -106,6 +168,31 @@ function formatMXN(value: number) {
     currency: "MXN",
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+function formatPrice(price?: string) {
+  if (!price) return "Precio disponible al solicitar";
+  const n = Number(price);
+  if (Number.isNaN(n)) return `${price} MXN`;
+  return formatMXN(n);
+}
+
+function getBestOption(q: QuoteItem): QuoteOption | null {
+  const list = q.options?.parcel ?? [];
+  if (!list.length) return null;
+  const priced = list.filter((o) => o.price && !Number.isNaN(Number(o.price)));
+  if (priced.length) {
+    return priced.reduce((a, b) => (Number(b.price) < Number(a.price) ? b : a));
+  }
+  return list[0];
+}
+
+function formatRoute(q: QuoteItem) {
+  const o = q.origin ?? {};
+  const d = q.destination ?? {};
+  const left = `${o.city ? o.city + " " : ""}(${o.postal_code ?? "-"})`;
+  const right = `${d.city ? d.city + " " : ""}(${d.postal_code ?? "-"})`;
+  return `${left} → ${right}`;
 }
 
 function formatDateTime(value?: string) {
@@ -208,7 +295,7 @@ export default function DashboardPage() {
 
   const [selectedQuote, setSelectedQuote] = useState<QuoteItem | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
-  
+
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
 
@@ -224,11 +311,11 @@ export default function DashboardPage() {
       const endpoint = apiBase ? `${apiBase}/quotes/latest/` : "/api/quotes/latest/";
       const res = await fetch(endpoint, { method: "GET" });
       const json: LatestQuoteApiResponse = await res.json().catch(() => ({ message: "", data: null }));
-      if (!res.ok) {
+      if (!res.ok || !json.data) {
         setLatestQuote(null);
         return;
       }
-      setLatestQuote(json.data);
+      setLatestQuote(normalizeQuote(json.data));
     } catch {
       setLatestQuote(null);
     } finally {
@@ -247,7 +334,7 @@ export default function DashboardPage() {
         setQuoteHistory([]);
         return;
       }
-      setQuoteHistory(Array.isArray(json.data) ? json.data : []);
+      setQuoteHistory(Array.isArray(json.data) ? json.data.map(normalizeQuote) : []);
     } catch {
       setQuoteHistory([]);
     } finally {
@@ -264,7 +351,7 @@ export default function DashboardPage() {
         const res = await fetch(endpoint, { method: "GET" });
         const json: QuoteDetailApiResponse = await res.json();
         if (!res.ok) return;
-        setSelectedQuote(json.data);
+        setSelectedQuote(normalizeQuote(json.data));
       } catch (err) {
         console.error("Error cargando detalle de cotización:", err);
       } finally {
@@ -367,6 +454,8 @@ export default function DashboardPage() {
     return `${checkpoints}/2`;
   }, [canInventoryRead, inventoryAllowed]);
 
+  const latestBest = latestQuote ? getBestOption(latestQuote) : null;
+
   function onCompanyChange(nextCompanyId: string) {
     setActiveCompanyId(nextCompanyId);
     setActiveCompanyCookie(nextCompanyId);
@@ -405,26 +494,26 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex items-center gap-3">
-            <Link href="/" aria-label="Volver al inicio" className="inline-flex items-center">
-              <div
-                className={
-                  isDark
-                    ? "rounded-lg border border-slate-200 bg-white px-2 py-1"
-                    : "border-0 bg-transparent p-0 shadow-none"
-                }
-              >
-                <div className="relative h-28 w-[130px]">
-                  <Image
-                    src="/images/Logo-fb.png"
-                    alt="Global Pack Center"
-                    fill
-                    priority
-                    className="object-contain object-left"
-                    sizes="130px"
-                  />
+              <Link href="/" aria-label="Volver al inicio" className="inline-flex items-center">
+                <div
+                  className={
+                    isDark
+                      ? "rounded-lg border border-slate-200 bg-white px-2 py-1"
+                      : "border-0 bg-transparent p-0 shadow-none"
+                  }
+                >
+                  <div className="relative h-28 w-[130px]">
+                    <Image
+                      src="/images/Logo-fb.png"
+                      alt="Global Pack Center"
+                      fill
+                      priority
+                      className="object-contain object-left"
+                      sizes="130px"
+                    />
+                  </div>
                 </div>
-              </div>
-            </Link>
+              </Link>
 
               <ThemeToggle />
 
@@ -537,8 +626,8 @@ export default function DashboardPage() {
         <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/15 dark:bg-white/[0.06]">
           <h3 className="text-lg font-bold text-slate-900 dark:text-white">Módulos habilitados por permisos</h3>
           <p className="mt-1 text-sm text-slate-600 dark:text-white/70">
-            Este bloque resume tres frentes: <strong>Operaciones</strong> para visibilidad de envíos, <strong>Auditoría</strong> para trazabilidad y control, y <strong>Usuarios</strong>  para gestión de accesos por rol.
-      La idea es operar más rápido, con seguridad y gobernanza, desde un solo panel
+            Este bloque resume tres frentes: <strong>Operaciones</strong> para visibilidad de envíos, <strong>Auditoría</strong> para trazabilidad y control, y <strong>Usuarios</strong> para gestión de accesos por rol.
+            La idea es operar más rápido, con seguridad y gobernanza, desde un solo panel.
           </p>
 
           <div className="mt-4 grid gap-4 md:grid-cols-3">
@@ -598,14 +687,26 @@ export default function DashboardPage() {
                 <p className="mt-2 text-sm text-slate-500 dark:text-white/60">No hay cotizaciones todavía.</p>
               ) : (
                 <>
-                  <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">{latestQuote.full_name}</p>
-                  <p className="text-sm text-slate-600 dark:text-white/70">{latestQuote.email}</p>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-white/60">
-                    {latestQuote.scope} · {latestQuote.origin_country} ({latestQuote.origin_zip}) → {latestQuote.dest_country} ({latestQuote.dest_zip})
+                  <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">
+                    Cotización #{latestQuote.id}
+                    {latestQuote.provider ? ` · ${latestQuote.provider}` : ""}
                   </p>
+                  {latestQuote.full_name ? (
+                    <p className="text-sm text-slate-600 dark:text-white/70">
+                      {latestQuote.full_name}
+                      {latestQuote.email ? ` · ${latestQuote.email}` : ""}
+                    </p>
+                  ) : null}
+                  <p className="mt-1 text-xs text-slate-500 dark:text-white/60">{formatRoute(latestQuote)}</p>
                   <p className="mt-2 text-sm text-slate-700 dark:text-white/80">
                     Peso cobrable:{" "}
-                    <span className="font-semibold">{latestQuote.result_weight?.chargeable_kg?.toFixed?.(2) ?? "-"} kg</span>
+                    <span className="font-semibold">{latestQuote.weight?.chargeable_kg?.toFixed?.(2) ?? "-"} kg</span>
+                  </p>
+                  <p className="mt-1 text-sm text-slate-700 dark:text-white/80">
+                    Mejor opción:{" "}
+                    <span className="font-semibold">
+                      {latestBest ? `${latestBest.carrier} · ${formatPrice(latestBest.price)}` : "-"}
+                    </span>
                   </p>
                   <p className="mt-1 text-xs text-slate-500 dark:text-white/60">{formatDateTime(latestQuote.created_at)}</p>
                 </>
@@ -628,7 +729,7 @@ export default function DashboardPage() {
                     <thead>
                       <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500 dark:border-white/10 dark:text-white/60">
                         <th className="px-2 py-2">ID</th>
-                        <th className="px-2 py-2">Cliente</th>
+                        <th className="px-2 py-2">Proveedor</th>
                         <th className="px-2 py-2">Ruta</th>
                         <th className="px-2 py-2">Peso cobrable</th>
                         <th className="px-2 py-2">Mejor opción</th>
@@ -638,7 +739,7 @@ export default function DashboardPage() {
                     </thead>
                     <tbody>
                       {quoteHistory.map((q) => {
-                        const best = q.result_options?.[0];
+                        const best = getBestOption(q);
                         return (
                           <tr
                             key={q.id}
@@ -646,17 +747,19 @@ export default function DashboardPage() {
                           >
                             <td className="px-2 py-2 font-medium">{q.id}</td>
                             <td className="px-2 py-2">
-                              <p className="font-medium text-slate-900 dark:text-white">{q.full_name}</p>
-                              <p className="text-xs text-slate-500 dark:text-white/60">{q.email}</p>
+                              <p className="font-medium text-slate-900 dark:text-white">{q.provider ?? "-"}</p>
+                              {q.full_name ? (
+                                <p className="text-xs text-slate-500 dark:text-white/60">{q.full_name}</p>
+                              ) : null}
                             </td>
                             <td className="px-2 py-2 text-xs text-slate-700 dark:text-white/80">
-                              {q.origin_country} ({q.origin_zip}) → {q.dest_country} ({q.dest_zip})
+                              {formatRoute(q)}
                             </td>
                             <td className="px-2 py-2">
-                              {q.result_weight?.chargeable_kg?.toFixed?.(2) ?? "-"} kg
+                              {q.weight?.chargeable_kg?.toFixed?.(2) ?? "-"} kg
                             </td>
                             <td className="px-2 py-2 text-xs">
-                              {best ? `${best.carrier_name} · ${formatMXN(best.estimated_price_mxn)}` : "-"}
+                              {best ? `${best.carrier} · ${formatPrice(best.price)}` : "-"}
                             </td>
                             <td className="px-2 py-2 text-xs text-slate-500 dark:text-white/60">
                               {formatDateTime(q.created_at)}
@@ -682,97 +785,109 @@ export default function DashboardPage() {
           </div>
 
           {selectedQuote && (
-          <article className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-white/15 dark:bg-white/[0.04]">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h4 className="text-base font-bold text-slate-900 dark:text-white">
-                  Detalle cotización #{selectedQuote.id}
-                </h4>
-                <p className="text-xs text-slate-500 dark:text-white/60">{formatDateTime(selectedQuote.created_at)}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedQuote(null)}
-                className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
-              >
-                Cerrar
-              </button>
-            </div>
-
-            <div className="mt-3 grid gap-3 md:grid-cols-3">
-              <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-                <p className="text-xs text-slate-500 dark:text-white/60">Cliente</p>
-                <p className="mt-1 font-semibold">{selectedQuote.full_name}</p>
-                <p className="text-sm text-slate-600 dark:text-white/70">{selectedQuote.email}</p>
-                <p className="text-sm text-slate-600 dark:text-white/70">{selectedQuote.phone}</p>
-                {selectedQuote.customer_id ? (
-                  <p className="mt-1 text-xs text-slate-500 dark:text-white/60">ID cliente: #{selectedQuote.customer_id}</p>
-                ) : null}
+            <article className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-white/15 dark:bg-white/[0.04]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                    Detalle cotización #{selectedQuote.id}
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-white/60">{formatDateTime(selectedQuote.created_at)}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedQuote(null)}
+                  className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
+                >
+                  Cerrar
+                </button>
               </div>
 
-              <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-                <p className="text-xs text-slate-500 dark:text-white/60">Ruta</p>
-                <p className="mt-1 text-sm">
-                  {selectedQuote.scope} · {selectedQuote.origin_country} ({selectedQuote.origin_zip}) →{" "}
-                  {selectedQuote.dest_country} ({selectedQuote.dest_zip})
-                </p>
-                <p className="mt-1 text-xs text-slate-500 dark:text-white/60">
-                  Destino ciudad: {selectedQuote.dest_city || "-"}
-                </p>
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                  <p className="text-xs text-slate-500 dark:text-white/60">Origen</p>
+                  <p className="mt-1 text-sm font-semibold">
+                    {selectedQuote.origin?.city || "-"}, {selectedQuote.origin?.state || "-"}
+                  </p>
+                  <p className="text-sm text-slate-600 dark:text-white/70">
+                    {selectedQuote.origin?.area || "-"} · CP {selectedQuote.origin?.postal_code || "-"}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-white/60">
+                    {selectedQuote.origin?.country_code || "-"}
+                  </p>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                  <p className="text-xs text-slate-500 dark:text-white/60">Destino</p>
+                  <p className="mt-1 text-sm font-semibold">
+                    {selectedQuote.destination?.city || "-"}, {selectedQuote.destination?.state || "-"}
+                  </p>
+                  <p className="text-sm text-slate-600 dark:text-white/70">
+                    {selectedQuote.destination?.area || "-"} · CP {selectedQuote.destination?.postal_code || "-"}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-white/60">
+                    {selectedQuote.destination?.country_code || "-"}
+                  </p>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                  <p className="text-xs text-slate-500 dark:text-white/60">Peso</p>
+                  <p className="mt-1 text-sm">Real: {selectedQuote.weight?.real_kg?.toFixed?.(2) ?? "-"} kg</p>
+                  <p className="text-sm">Volumétrico: {selectedQuote.weight?.volumetric_kg?.toFixed?.(2) ?? "-"} kg</p>
+                  <p className="text-sm font-semibold">
+                    Cobrable: {selectedQuote.weight?.chargeable_kg?.toFixed?.(2) ?? "-"} kg
+                  </p>
+                </div>
               </div>
 
-              <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-                <p className="text-xs text-slate-500 dark:text-white/60">Peso</p>
-                <p className="mt-1 text-sm">Real: {selectedQuote.result_weight?.real_kg?.toFixed?.(2) ?? "-"} kg</p>
-                <p className="text-sm">Volumétrico: {selectedQuote.result_weight?.volumetric_kg?.toFixed?.(2) ?? "-"} kg</p>
-                <p className="text-sm font-semibold">
-                  Cobrable: {selectedQuote.result_weight?.chargeable_kg?.toFixed?.(2) ?? "-"} kg
-                </p>
-              </div>
-            </div>
+              {(selectedQuote.full_name || selectedQuote.notes || selectedQuote.customer_pickup_address_line1) && (
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                    <p className="text-xs text-slate-500 dark:text-white/60">Cliente / recolección</p>
+                    {selectedQuote.full_name ? (
+                      <p className="mt-1 text-sm font-semibold">
+                        {selectedQuote.full_name}
+                        {selectedQuote.email ? ` · ${selectedQuote.email}` : ""}
+                      </p>
+                    ) : null}
+                    <p className="mt-1 text-sm">
+                      {selectedQuote.customer_pickup_address_line1?.trim()
+                        ? selectedQuote.customer_pickup_address_line1
+                        : "No capturada en esta cotización"}
+                    </p>
+                  </div>
 
-            {/* NUEVO: Recolección + Comentarios */}
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-                <p className="text-xs text-slate-500 dark:text-white/60">Dirección de recolección</p>
-                <p className="mt-1 text-sm">
-                  {selectedQuote.customer_pickup_address_line1?.trim()
-                    ? selectedQuote.customer_pickup_address_line1
-                    : "No capturada en esta cotización"}
-                </p>
-                <p className="mt-1 text-xs text-slate-500 dark:text-white/60">
-                  {selectedQuote.customer_pickup_city || "-"},{" "}
-                  {selectedQuote.customer_pickup_zip || "-"} ·{" "}
-                  {selectedQuote.customer_pickup_country || "-"}
-                </p>
-              </div>
-
-              <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-                <p className="text-xs text-slate-500 dark:text-white/60">Comentarios</p>
-                <p className="mt-1 text-sm whitespace-pre-wrap">
-                  {selectedQuote.notes?.trim() ? selectedQuote.notes : "Sin comentarios"}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
-              <p className="text-xs text-slate-500 dark:text-white/60">Top opciones</p>
-              {loadingDetail ? (
-                <p className="mt-2 text-sm text-slate-500 dark:text-white/60">Cargando detalle...</p>
-              ) : (
-                <ul className="mt-2 space-y-1 text-sm">
-                  {selectedQuote.result_options?.map((opt) => (
-                    <li key={`${selectedQuote.id}-${opt.carrier_code}`}>
-                      <span className="font-semibold">{opt.carrier_name}</span>{" "}
-                      <span className="text-slate-600 dark:text-white/70">
-                        · {formatMXN(opt.estimated_price_mxn)} · {opt.eta_days} día(s)
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                  <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                    <p className="text-xs text-slate-500 dark:text-white/60">Comentarios</p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm">
+                      {selectedQuote.notes?.trim() ? selectedQuote.notes : "Sin comentarios"}
+                    </p>
+                  </div>
+                </div>
               )}
-            </div>
-          </article>
+
+              <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                <p className="text-xs text-slate-500 dark:text-white/60">
+                  Opciones ({selectedQuote.options.parcel.length} paquetería · {selectedQuote.options.freight.length} carga)
+                </p>
+                {loadingDetail ? (
+                  <p className="mt-2 text-sm text-slate-500 dark:text-white/60">Cargando detalle...</p>
+                ) : (
+                  <ul className="mt-2 space-y-1 text-sm">
+                    {[...selectedQuote.options.parcel, ...selectedQuote.options.freight].map((opt, i) => (
+                      <li key={`${selectedQuote.id}-${opt.rate_id ?? opt.carrier_code}-${i}`}>
+                        <span className="font-semibold">{opt.carrier}</span>{" "}
+                        {opt.service ? (
+                          <span className="text-slate-500 dark:text-white/60">({opt.service})</span>
+                        ) : null}{" "}
+                        <span className="text-slate-600 dark:text-white/70">
+                          · {formatPrice(opt.price)} · {opt.estimated_days ?? "-"} día(s)
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </article>
           )}
         </section>
       </div>

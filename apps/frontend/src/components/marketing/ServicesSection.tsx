@@ -66,7 +66,7 @@ export function ServicesSection() {
             </p>
 
             <h2 className="mt-5 text-3xl font-extrabold tracking-tight md:text-4xl">
-              Soluciones de carga y logística B2B
+              Soluciones de logística y empaque
               <span className="block text-[#F05A72] [text-shadow:0_2px_14px_rgba(255,77,99,0.28)]">
                 para operar con velocidad, control y rentabilidad
               </span>

@@ -26,7 +26,7 @@ export function FinalCta() {
           </p>
 
           <h2 className="mt-3 text-3xl font-extrabold leading-tight md:text-5xl">
-            Cotiza tu logística de carga con
+            Cotiza tu solución logística y de empaque con
             <span className="block bg-gradient-to-r from-rose-300 via-white to-sky-200 bg-clip-text text-transparent">
               Global Pack Center
             </span>
@@ -42,7 +42,7 @@ export function FinalCta() {
               href="/solicitar-cotizacion"
               className="inline-flex items-center justify-center rounded-xl bg-[var(--primary)] px-6 py-3 text-sm font-semibold text-white transition-all duration-300 hover:-translate-y-0.5 hover:bg-[var(--primary-dark)] hover:shadow-[0_10px_25px_rgba(255,90,107,0.35)]"
             >
-              Solicitar cotización de carga
+              Solicitar cotización
             </Link>
 
             <Link

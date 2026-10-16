@@ -1,25 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ArrowRight, MapPin, PackageCheck, Search, Truck } from "lucide-react";
+import Image from "next/image";
 
 type Loc = {
   city?: string;
   stateOrProvinceCode?: string;
   countryCode?: string;
+  countryName?: string;
 };
 
 type ScanEvent = {
-  date: string;
+  date?: string;
   eventType?: string;
   eventDescription?: string;
+  exceptionCode?: string;
+  exceptionDescription?: string;
   derivedStatusCode?: string;
-  scanLocation?: Loc;
+  derivedStatus?: string;
+  scanLocation?: Loc & {
+    streetLines?: string[];
+    postalCode?: string;
+    residential?: string | boolean;
+    locationId?: string;
+    locationType?: string;
+  };
 };
 
 type TrackResult = {
   trackingNumberInfo?: { trackingNumber?: string };
-  serviceDetail?: { description?: string };
+  serviceDetail?: { type?: string; description?: string; shortDescription?: string };
   latestStatusDetail?: {
     code?: string;
     derivedCode?: string;
@@ -46,26 +57,61 @@ type TrackResult = {
   }[];
 };
 
-const STEP_LABELS = ["Recolectado", "En tránsito", "En entrega", "Entregado"] as const;
+const STEP_LABELS = ["Creado", "Recolectado", "En tránsito", "En entrega"] as const;
 
-function stepIndex(code?: string): number {
-  switch ((code || "").toUpperCase()) {
-    case "DL":
-      return 3;
+const STATUS_STEP: Record<string, number> = {
+  IN: 0,
+  OC: 0,
+  PU: 1,
+  IT: 2,
+  AR: 2,
+  DP: 2,
+  AF: 2,
+  OF: 2,
+  AO: 2,
+  HA: 2,
+  RR: 2,
+  OD: 3,
+  HL: 3,
+  HP: 3,
+};
 
-    case "OD":
-      return 2;
+const EVENT_PRIORITY = ["DL", "OD", "HL", "HP", "PU", "IT", "AR", "DP", "AO", "HA", "RR", "OC", "IN"];
 
-    case "IT":
-    case "AR":
-    case "DP":
-    case "AF":
-    case "OF":
-      return 1;
+function codeStep(code?: string): number | null {
+  const value = STATUS_STEP[(code || "").trim().toUpperCase()];
+  return value === undefined ? null : value;
+}
 
-    default:
-      return 0;
-  }
+function normalizeCode(code?: string) {
+  return (code || "").trim().toUpperCase();
+}
+
+function computeStep(
+  latest: TrackResult["latestStatusDetail"] | undefined,
+  events: ScanEvent[]
+): number {
+  const latestCode = normalizeCode(latest?.derivedCode || latest?.code);
+  const newest = events[0];
+  const newestCode = normalizeCode(newest?.derivedStatusCode || newest?.eventType);
+
+  const sortedEvents = [...events].sort((a, b) => {
+    const pa = EVENT_PRIORITY.indexOf(normalizeCode(a.derivedStatusCode || a.eventType));
+    const pb = EVENT_PRIORITY.indexOf(normalizeCode(b.derivedStatusCode || b.eventType));
+    return (pa === -1 ? 999 : pa) - (pb === -1 ? 999 : pb);
+  });
+
+  const eventCode = normalizeCode(
+    sortedEvents[0]?.derivedStatusCode || sortedEvents[0]?.eventType
+  );
+
+  const candidates = [
+    codeStep(latestCode),
+    codeStep(newestCode),
+    codeStep(eventCode),
+  ].filter((n): n is number => n !== null);
+
+  return candidates.length ? Math.max(...candidates) : 0;
 }
 
 function fmt(timestamp?: string) {
@@ -89,6 +135,32 @@ function place(location?: Loc) {
     .join(", ");
 
   return value || "-";
+}
+
+function statusBadge(step: number) {
+  return STEP_LABELS[Math.min(step, STEP_LABELS.length - 1)];
+}
+
+function translateFedexStatus(text?: string) {
+  const value = (text || "").trim();
+
+  if (!value) return "-";
+
+  const lower = value.toLowerCase();
+
+  if (lower === "ready for pickup") return "Listo para recoger";
+  if (lower === "picked up") return "Recogido";
+  if (lower === "in transit") return "En tránsito";
+  if (lower === "on fedex vehicle for delivery") return "En vehículo FedEx para entrega";
+  if (lower === "arrived at fedex location") return "Llegó a una instalación FedEx";
+  if (lower === "at local fedex facility") return "En instalación local de FedEx";
+  if (lower === "departed fedex location") return "Salió de una instalación FedEx";
+  if (lower === "shipment information sent to fedex") return "Información del envío enviada a FedEx";
+  if (lower === "shipment arriving on-time") return "El envío llegará a tiempo";
+  if (lower === "delivery option requested") return "Opción de entrega solicitada";
+  if (lower === "hold at location request accepted") return "Solicitud de retención en sucursal aceptada";
+
+  return value;
 }
 
 export default function RastreoFedexPage() {
@@ -120,7 +192,6 @@ export default function RastreoFedexPage() {
       const json = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        // El proxy convierte errors[0].message de FedEx en json.detail.
         setError(json?.detail ?? "No se pudo consultar la guía.");
         return;
       }
@@ -141,14 +212,20 @@ export default function RastreoFedexPage() {
     }
   }
 
-  const events = [...(result?.scanEvents ?? [])].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+  const events = useMemo(
+    () =>
+      [...(result?.scanEvents ?? [])].sort((a, b) => {
+        const da = a.date ? new Date(a.date).getTime() : 0;
+        const db = b.date ? new Date(b.date).getTime() : 0;
+        return db - da;
+      }),
+    [result?.scanEvents]
   );
 
   const latest = result?.latestStatusDetail;
-  const statusCode = latest?.derivedCode ?? latest?.code;
-  const step = stepIndex(statusCode);
-  const delivered = step === 3;
+  const step = computeStep(latest, events);
+  const currentStatus = statusBadge(step);
+  const delivered = step >= STEP_LABELS.length - 1;
 
   const origin = place(
     result?.originLocation?.locationContactAndAddress?.address ??
@@ -166,7 +243,17 @@ export default function RastreoFedexPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <h1 className="text-2xl font-bold">Rastreo FedEx</h1>
+      <div className="flex items-center gap-3">
+        <Image
+          src="/images/fedex-ar21.svg"
+          alt="FedEx"
+          width={42}
+          height={42}
+          className="h-20 w-42 object-contain"
+          priority
+        />
+        <h1 className="text-4xl font-bold">Rastreo </h1>
+      </div>
 
       <form onSubmit={onSearch} className="flex gap-2">
         <input
@@ -209,10 +296,10 @@ export default function RastreoFedexPage() {
                   Estatus actual
                 </p>
                 <p className="text-lg font-bold">
-                  {latest?.statusByLocale ?? latest?.description ?? "-"}
+                  {translateFedexStatus(latest?.statusByLocale ?? latest?.description) ?? currentStatus}
                 </p>
                 <p className="text-sm text-slate-600 dark:text-white/70">
-                  {latest?.description ?? "-"}
+                  {translateFedexStatus(latest?.description ?? latest?.statusByLocale) ?? "-"}
                 </p>
                 <p className="mt-1 flex items-center gap-1 text-xs text-slate-500 dark:text-white/60">
                   <MapPin className="h-3 w-3" />
@@ -231,7 +318,12 @@ export default function RastreoFedexPage() {
 
               <div>
                 <p className="text-xs text-slate-500 dark:text-white/60">Servicio</p>
-                <p className="font-medium">{result.serviceDetail?.description ?? "-"}</p>
+                <p className="font-medium">
+                  {result.serviceDetail?.description ??
+                    result.serviceDetail?.shortDescription ??
+                    result.serviceDetail?.type ??
+                    "-"}
+                </p>
               </div>
 
               <div className="sm:col-span-2">
@@ -308,11 +400,27 @@ export default function RastreoFedexPage() {
 
             <ol className="space-y-4 border-l border-slate-200 pl-4 dark:border-white/15">
               {events.map((event, index) => (
-                <li key={`${event.date}-${index}`} className="relative">
+                <li key={`${event.date ?? "event"}-${index}`} className="relative">
                   <span className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full bg-[#C1374A]" />
 
                   <p className="text-sm font-medium">
-                    {event.eventDescription ?? event.eventType ?? "-"}
+                    {event.eventDescription ?? event.derivedStatus ?? event.eventType ?? "-"}
+                  </p>
+
+                  {event.exceptionDescription && (
+                    <p className="text-xs text-amber-600 dark:text-amber-300">
+                      {event.exceptionDescription}
+                    </p>
+                  )}
+
+                  <p className="text-xs text-slate-500 dark:text-white/60">
+                    {[
+                      event.eventType ? `Tipo: ${event.eventType}` : null,
+                      event.derivedStatusCode ? `Estado: ${event.derivedStatusCode}` : null,
+                      event.exceptionCode ? `Excepción: ${event.exceptionCode}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </p>
 
                   <p className="flex items-center gap-1 text-xs text-slate-500 dark:text-white/60">

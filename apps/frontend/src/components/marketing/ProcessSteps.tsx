@@ -6,7 +6,7 @@ import { Reveal } from "@/components/marketing/Reveal";
 const steps = [
   {
     icon: ClipboardList,
-    title: "1. Diagnóstico logístico de carga",
+    title: "1. Diagnóstico logístico de paquetería y carga",
     description:
       "Evaluamos tipo de carga, volumen, frecuencia, ventanas de entrega y zonas de cobertura para diseñar una operación viable y escalable.",
   },
@@ -48,11 +48,11 @@ export function ProcessSteps() {
         <Reveal y={18}>
           <div className="mx-auto max-w-3xl text-center">
             <p className="inline-flex items-center rounded-full border border-white/20 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-white/80">
-              Cómo operamos tu carga
+              Cómo operamos tu paquetería y carga
             </p>
 
             <h2 className="mt-5 text-3xl font-extrabold tracking-tight md:text-4xl">
-              Un proceso logístico de carga
+              Un proceso logístico de paquetería y carga
               <span className="block text-brand-red [text-shadow:0_2px_14px_rgba(255,77,99,0.30)]">
                 claro, medible y orientado a resultados
               </span>

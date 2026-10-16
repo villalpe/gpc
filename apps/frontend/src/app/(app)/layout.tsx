@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -13,9 +14,6 @@ import {
   ClipboardList,
   ShieldCheck,
   LogOut,
-  Package,
-  Boxes,
-  Globe2,
 } from "lucide-react";
 
 import { apiFetch, ApiError } from "@/lib/apiFetch";
@@ -35,7 +33,8 @@ type MeResponse = {
 type NavItem = {
   label: string;
   href: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon?: React.ComponentType<{ className?: string }>;
+  logo?: string; // ruta del SVG en /public
   requiredPerms?: string[];
   soon?: boolean; // "Próximamente"
 };
@@ -51,21 +50,21 @@ const NAV_SECTIONS: NavSection[] = [
     title: "General",
     items: [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { label: "Cotizar y crear", href: "/solicitar-cotizacion", icon: Calculator, requiredPerms: ["quotes.create"] },
     ],
   },
   {
     title: "Rastreos",
     items: [
-      { label: "DHL", href: "/rastreo/dhl", icon: Truck },
-      { label: "Skydropx", href: "/rastreo/skydropx", icon: Package, soon: true },
-      { label: "FedEx", href: "/rastreo/fedex", icon: Boxes },
-      { label: "Cargobase", href: "/rastreo/cargobase", icon: Globe2 },
+      { label: "FedEx", href: "/rastreo/fedex", logo: "/images/fedex-ar21.svg" },
+      { label: "DHL", href: "/rastreo/dhl", logo: "/images/dhl-1.svg" },
+      { label: "Skydropx", href: "/rastreo/skydropx", logo: "/images/skydropx.svg", soon: true },
+      { label: "Cargobase", href: "/rastreo/cargobase", logo: "/images/cargobase.svg" },
     ],
   },
   {
     title: "Operación",
     items: [
+      { label: "Cotizar y crear", href: "/solicitar-cotizacion", icon: Calculator, requiredPerms: ["quotes.create"] },
       { label: "Crear envío", href: "/envios/crear", icon: Truck, requiredPerms: ["quotes.create"] },
       { label: "Link de pedido", href: "/pedidos/link", icon: Link2, requiredPerms: ["quotes.create"] },
       { label: "Preparar órdenes", href: "/ordenes/preparar", icon: PackageCheck, requiredPerms: ["inventory.read"] },
@@ -101,6 +100,33 @@ function getCookie(name: string) {
     .find((row) => row.startsWith(`${name}=`))
     ?.split("=")[1];
   return v ? decodeURIComponent(v) : "";
+}
+
+function NavIcon({ item, dimmed = false }: { item: NavItem; dimmed?: boolean }) {
+  if (item.logo) {
+    return (
+      <span
+        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white p-0.5 ring-1 ring-slate-200 dark:ring-white/10 ${
+          dimmed ? "opacity-50 grayscale" : ""
+        }`}
+      >
+        <Image
+          src={item.logo}
+          alt={item.label}
+          width={20}
+          height={20}
+          className="h-5 w-5 object-contain"
+        />
+      </span>
+    );
+  }
+
+  if (item.icon) {
+    const Icon = item.icon;
+    return <Icon className="h-4 w-4 shrink-0" />;
+  }
+
+  return null;
 }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -168,8 +194,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
                   <div className="space-y-1">
                     {section.items.map((item) => {
-                      const Icon = item.icon;
-
                       if (item.soon) {
                         return (
                           <span
@@ -178,7 +202,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                             className="flex cursor-not-allowed items-center justify-between rounded-xl px-3 py-2 text-sm text-slate-400 dark:text-white/40"
                           >
                             <span className="flex items-center gap-2">
-                              <Icon className="h-4 w-4" />
+                              <NavIcon item={item} dimmed />
                               {item.label}
                             </span>
                             <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-white/10 dark:text-white/60">
@@ -206,7 +230,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                           aria-disabled={!allowed}
                         >
                           <span className="flex items-center gap-2">
-                            <Icon className="h-4 w-4" />
+                            <NavIcon item={item} />
                             {item.label}
                           </span>
 

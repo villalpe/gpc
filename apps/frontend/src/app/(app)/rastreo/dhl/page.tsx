@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Search, MapPin, PackageCheck, Truck, ArrowRight } from "lucide-react";
+import Image from "next/image";
 
 type DhlEvent = {
   timestamp: string;
@@ -127,7 +128,17 @@ export default function RastreoDhlPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <h1 className="text-2xl font-bold">Rastreo DHL</h1>
+      <div className="flex items-center gap-3">
+        <Image
+          src="/images/dhl-1.svg"
+          alt="DHL"
+          width={42}
+          height={42}
+          className="h-20 w-42 object-contain"
+          priority
+        />
+        <h1 className="text-4xl font-bold">Rastreo</h1>
+      </div>
 
       <form onSubmit={onSearch} className="flex gap-2">
         <input

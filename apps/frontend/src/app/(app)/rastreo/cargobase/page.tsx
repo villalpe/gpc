@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ArrowRight, Search } from "lucide-react";
+import Image from "next/image";
 
 type Nullable<T> = T | null | undefined;
 
@@ -305,8 +306,18 @@ export default function RastreoCargobasePage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <h1 className="text-2xl font-bold">Cargobase - Detalle de solicitud</h1>
-
+            <div className="flex items-center gap-3">
+              <Image
+                src="/images/cargobase.svg"
+                alt="Cargobase"
+                width={42}
+                height={42}
+                className="h-20 w-42 object-contain"
+                priority
+              />
+              <h1 className="text-2xl font-bold">Detalle de solicitud</h1>
+            </div>
+      
       <form onSubmit={onSearch} className="flex gap-2">
         <input
           value={requestId}

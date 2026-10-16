@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     const cookieStore = await cookies();
 
     const accessToken = cookieStore.get("access_token")?.value;
-    const companyId = cookieStore.get("company_id")?.value;
+    const companyId = cookieStore.get("active_company_id")?.value ?? cookieStore.get("company_id")?.value;
 
     if (!accessToken) {
       return NextResponse.json({ detail: "No autenticado." }, { status: 401 });
