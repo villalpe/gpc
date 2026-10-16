@@ -130,6 +130,19 @@ type CargobaseRequest = {
   billing_info?: Nullable<BillingInfo>;
 };
 
+type Quote = {
+  quote_reference: string;
+  freight: string;
+  quote_title: string;
+  status: string;
+};
+
+type QuotesResponse = {
+  shipment: string;
+  count: number;
+  quotes: Quote[];
+};
+
 type Point = {
   name: string;
   street: string;
@@ -144,6 +157,8 @@ type Point = {
   email: string;
   notes: string;
 };
+
+const CB_NUMBER = /^S\d{9}$/;
 
 const card =
   "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/15 dark:bg-white/[0.06]";
@@ -171,6 +186,21 @@ function pick(...values: unknown[]): string {
     if (v !== null && v !== undefined && v !== "") return String(v);
   }
   return "";
+}
+
+function statusClass(status: string) {
+  switch (status.toLowerCase()) {
+    case "booked":
+      return "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300";
+    case "submitted":
+      return "bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300";
+    case "lost":
+    case "canceled":
+    case "cancelled":
+      return "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300";
+    default:
+      return "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-white/80";
+  }
 }
 
 function buildPoint(
@@ -247,48 +277,78 @@ function BillingCard({ title, party }: { title: string; party: Nullable<BillingP
   );
 }
 
+function httpError(status: number, fallback: string, what: string) {
+  if (status === 401) return "Sesión expirada o token de Cargobase inválido (401).";
+  if (status === 403) return `No tienes permiso para consultar ${what} en Cargobase (403).`;
+  if (status === 404) return `No se encontró ${what} en Cargobase (404).`;
+  return fallback;
+}
+
 export default function RastreoCargobasePage() {
   const [requestId, setRequestId] = useState("");
   const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
+  const [quotesError, setQuotesError] = useState("");
   const [result, setResult] = useState<CargobaseRequest | null>(null);
+  const [quotes, setQuotes] = useState<Quote[]>([]);
+  const [selectedQuote, setSelectedQuote] = useState<string | null>(null);
+
+  async function loadRequest(id: string) {
+    const response = await fetch(`/api/cargobase/requests/${encodeURIComponent(id)}`);
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(
+        httpError(response.status, json?.detail ?? "No se pudo consultar la solicitud.", "esta solicitud")
+      );
+    }
+    return json as CargobaseRequest;
+  }
+
+  async function loadQuotes(id: string) {
+    const response = await fetch(`/api/cargobase/quotes?shipment=${encodeURIComponent(id)}`);
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(
+        httpError(response.status, json?.message ?? "No se pudieron consultar las quotes.", "las quotes")
+      );
+    }
+    return (json as QuotesResponse).quotes ?? [];
+  }
 
   async function onSearch(event: React.FormEvent) {
     event.preventDefault();
-    const value = requestId.trim();
+    const value = requestId.trim().toUpperCase();
 
     setError("");
+    setQuotesError("");
     setResult(null);
+    setQuotes([]);
+    setSelectedQuote(null);
+    setSearched(false);
 
-    if (!value) {
-      setError("Ingresa un ID de solicitud.");
+    if (!CB_NUMBER.test(value)) {
+      setError("Ingresa un CB number válido (S seguido de 9 dígitos, ej. S136951885).");
       return;
     }
 
+    setRequestId(value);
     setLoading(true);
-    try {
-      const response = await fetch(`/api/cargobase/requests/${encodeURIComponent(value)}`);
-      const json = await response.json().catch(() => ({}));
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          setError("Sesión expirada o token de Cargobase inválido (401).");
-        } else if (response.status === 403) {
-          setError("No tienes permiso para consultar esta solicitud en Cargobase (403).");
-        } else if (response.status === 404) {
-          setError("No se encontró la solicitud en Cargobase (404).");
-        } else {
-          setError(json?.detail ?? "No se pudo consultar la solicitud.");
-        }
-        return;
-      }
+    // Las dos consultas corren en paralelo y una no bloquea a la otra
+    const [reqRes, quotesRes] = await Promise.allSettled([loadRequest(value), loadQuotes(value)]);
 
-      setResult(json as CargobaseRequest);
-    } catch {
-      setError("Error de red al consultar Cargobase.");
-    } finally {
-      setLoading(false);
-    }
+    if (reqRes.status === "fulfilled") setResult(reqRes.value);
+    else setError(reqRes.reason instanceof Error ? reqRes.reason.message : "Error de red al consultar Cargobase.");
+
+    if (quotesRes.status === "fulfilled") setQuotes(quotesRes.value);
+    else
+      setQuotesError(
+        quotesRes.reason instanceof Error ? quotesRes.reason.message : "Error de red al consultar las quotes."
+      );
+
+    setSearched(true);
+    setLoading(false);
   }
 
   const org = result?.organization ?? {};
@@ -306,24 +366,25 @@ export default function RastreoCargobasePage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-            <div className="flex items-center gap-3">
-              <Image
-                src="/images/cargobase.svg"
-                alt="Cargobase"
-                width={42}
-                height={42}
-                className="h-20 w-42 object-contain"
-                priority
-              />
-              <h1 className="text-2xl font-bold">Detalle de solicitud</h1>
-            </div>
-      
+      <div className="flex items-center gap-3">
+        <Image
+          src="/images/cargobase.svg"
+          alt="Cargobase"
+          width={42}
+          height={42}
+          className="h-20 w-42 object-contain"
+          priority
+        />
+        <h1 className="text-2xl font-bold">Solicitud y quotes</h1>
+      </div>
+
       <form onSubmit={onSearch} className="flex gap-2">
         <input
           value={requestId}
           onChange={(event) => setRequestId(event.target.value)}
-          placeholder="ID de solicitud (ej. S431954874)"
-          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#FF5A6B] focus:ring-4 focus:ring-[#FF5A6B]/15 dark:border-white/20 dark:bg-slate-900/70"
+          placeholder="CB number (ej. S136951885)"
+          maxLength={10}
+          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm uppercase outline-none focus:border-[#FF5A6B] focus:ring-4 focus:ring-[#FF5A6B]/15 dark:border-white/20 dark:bg-slate-900/70"
         />
         <button
           type="submit"
@@ -341,6 +402,79 @@ export default function RastreoCargobasePage() {
         </p>
       )}
 
+      {/* Quotes */}
+      {searched && (
+        <article className={card}>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="font-semibold">Quotes ({quotes.length})</h2>
+            <span className={muted}>{requestId}</span>
+          </div>
+
+          {quotesError ? (
+            <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+              {quotesError}
+            </p>
+          ) : quotes.length === 0 ? (
+            <p className="rounded-xl border border-slate-100 p-4 text-sm text-slate-600 dark:border-white/10 dark:text-white/70">
+              Este CB number todavía no tiene quotes.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className={muted}>
+                  <tr>
+                    <th className="py-2 pr-3">Quote</th>
+                    <th className="py-2 pr-3">Freight</th>
+                    <th className="py-2 pr-3">Quote title</th>
+                    <th className="py-2 pr-3">Status</th>
+                    <th className="py-2 text-right">Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {quotes.map((q) => {
+                    const selected = selectedQuote === q.quote_reference;
+                    return (
+                      <tr
+                        key={q.quote_reference}
+                        className={`border-t border-slate-100 align-middle dark:border-white/10 ${
+                          selected ? "bg-rose-50/60 dark:bg-white/[0.06]" : ""
+                        }`}
+                      >
+                        <td className="py-2 pr-3 font-medium">{val(q.quote_reference)}</td>
+                        <td className="py-2 pr-3">{val(q.freight)}</td>
+                        <td className="py-2 pr-3">{val(q.quote_title)}</td>
+                        <td className="py-2 pr-3">
+                          <span
+                            className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusClass(q.status)}`}
+                          >
+                            {val(q.status)}
+                          </span>
+                        </td>
+                        <td className="py-2 text-right">
+                          {/* TODO fase 2: al seleccionar, continuar al resumen del envío */}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedQuote(selected ? null : q.quote_reference)}
+                            className={`h-8 rounded-lg px-3 text-xs font-semibold transition ${
+                              selected
+                                ? "bg-[#C1374A] text-white"
+                                : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-white/20 dark:bg-white/10 dark:text-white"
+                            }`}
+                          >
+                            {selected ? "Seleccionada" : "Seleccionar"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </article>
+      )}
+
+      {/* Detalle del request */}
       {result && pickup && delivery && (
         <>
           <article className={card}>
@@ -348,9 +482,7 @@ export default function RastreoCargobasePage() {
               <div className="min-w-0">
                 <p className={`${muted} uppercase tracking-wide`}>Solicitud</p>
                 <h2 className="text-lg font-bold">{val(org.title)}</h2>
-                <p className="text-sm text-slate-600 dark:text-white/70">
-                  {val(org.shipment_id)}
-                </p>
+                <p className="text-sm text-slate-600 dark:text-white/70">{val(org.shipment_id)}</p>
               </div>
               <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-[#C1374A] dark:bg-white/10">
                 {val(org.request_status)}
@@ -376,24 +508,14 @@ export default function RastreoCargobasePage() {
               <Field label="Campo personalizado 2">{val(org.custom_field2)}</Field>
               <Field label="Campo personalizado 3">{val(org.custom_field3)}</Field>
               <Field label="Campo largo personalizado">{val(org.custom_longfield_01)}</Field>
-              <Field label="Recuperación de costos requerida">
-                {val(org.cost_recovery_required)}
-              </Field>
-              <Field label="Recuperación de costos 1">
-                {val(org.custom_cost_recovery_field1)}
-              </Field>
-              <Field label="Recuperación de costos 2">
-                {val(org.custom_cost_recovery_field2)}
-              </Field>
-              <Field label="Tipo de confirmación de mercancía">
-                {val(org.goods_confirmation_type)}
-              </Field>
+              <Field label="Recuperación de costos requerida">{val(org.cost_recovery_required)}</Field>
+              <Field label="Recuperación de costos 1">{val(org.custom_cost_recovery_field1)}</Field>
+              <Field label="Recuperación de costos 2">{val(org.custom_cost_recovery_field2)}</Field>
+              <Field label="Tipo de confirmación de mercancía">{val(org.goods_confirmation_type)}</Field>
               <Field label="Moneda">{val(org.shipment_currency)}</Field>
               <Field label="CBM solicitado">{val(org.requested_cbm)}</Field>
               <Field label="Lugar de pago">{val(org.payment_location)}</Field>
-              <Field label="Fecha límite de cotización">
-                {val(org.quoting_deadline_date)}
-              </Field>
+              <Field label="Fecha límite de cotización">{val(org.quoting_deadline_date)}</Field>
               <Field label="Hora límite">{val(org.quoting_deadline_time)}</Field>
               <Field label="Offset UTC">{val(org.quoting_deadline_utc_offset)}</Field>
               <Field label="Tiempo restante (cotización)">
@@ -414,7 +536,7 @@ export default function RastreoCargobasePage() {
             <h2 className="mb-3 font-semibold">Itinerario</h2>
             <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:items-center">
               <PointCard title="Recolección" p={pickup} />
-              <ArrowRight className="h-5 w-5 shrink-0 self-center rotate-90 lg:rotate-0" />
+              <ArrowRight className="h-5 w-5 shrink-0 rotate-90 self-center lg:rotate-0" />
               <PointCard title="Entrega" p={delivery} />
             </div>
 
@@ -451,9 +573,7 @@ export default function RastreoCargobasePage() {
               <Field label="Despacho de importación">{val(service.import_clearance)}</Field>
               <Field label="Seguro">{val(service.insurance)}</Field>
               <Field label="Referencia del proveedor">{val(service.provider_reference)}</Field>
-              <Field label="Equipo asignado">
-                {val(service.available_teams?.assigned_team)}
-              </Field>
+              <Field label="Equipo asignado">{val(service.available_teams?.assigned_team)}</Field>
             </div>
 
             <div className="mt-4">
@@ -505,10 +625,7 @@ export default function RastreoCargobasePage() {
                   </thead>
                   <tbody>
                     {items.map((item, index) => (
-                      <tr
-                        key={index}
-                        className="border-t border-slate-100 align-top dark:border-white/10"
-                      >
+                      <tr key={index} className="border-t border-slate-100 align-top dark:border-white/10">
                         <td className="py-2 pr-3">{val(item.units)}</td>
                         <td className="py-2 pr-3">{val(item.handling_unit)}</td>
                         <td className="py-2 pr-3">
@@ -526,14 +643,9 @@ export default function RastreoCargobasePage() {
                             <Flag on={item.hazardous} label="Peligroso" />
                             <Flag on={item.is_dangerous_good} label="Mercancía peligrosa" />
                             <Flag on={item.crating_required} label="Requiere embalaje" />
-                            <Flag
-                              on={item.temperature_control_required}
-                              label="Control de temperatura"
-                            />
+                            <Flag on={item.temperature_control_required} label="Control de temperatura" />
                           </div>
-                          {item.un_number && (
-                            <p className={`${muted} mt-1`}>UN: {item.un_number}</p>
-                          )}
+                          {item.un_number && <p className={`${muted} mt-1`}>UN: {item.un_number}</p>}
                           {item.other_instructions && (
                             <p className={`${muted} mt-1`}>{item.other_instructions}</p>
                           )}
