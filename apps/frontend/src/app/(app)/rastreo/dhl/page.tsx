@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Search, MapPin, PackageCheck, Truck, ArrowRight } from "lucide-react";
 import Image from "next/image";
+import TrackingHeader from "@/components/tracking/TrackingHeader";
 
 type DhlEvent = {
   timestamp: string;
@@ -128,34 +129,22 @@ export default function RastreoDhlPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div className="flex items-center gap-3">
-        <Image
-          src="/images/dhl-1.svg"
-          alt="DHL"
-          width={42}
-          height={42}
-          className="h-20 w-42 object-contain"
-          priority
-        />
-        <h1 className="text-4xl font-bold">Rastreo</h1>
-      </div>
-
-      <form onSubmit={onSearch} className="flex gap-2">
-        <input
-          value={tn}
-          onChange={(e) => setTn(e.target.value)}
-          placeholder="Número de guía"
-          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#FF5A6B] focus:ring-4 focus:ring-[#FF5A6B]/15 dark:border-white/20 dark:bg-slate-900/70"
-        />
-        <button
-          type="submit"
-          disabled={loading}
-          className="inline-flex items-center gap-2 rounded-xl bg-[#C1374A] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-        >
-          <Search className="h-4 w-4" />
-          {loading ? "Buscando..." : "Rastrear"}
-        </button>
-      </form>
+      <TrackingHeader
+        logoSrc="/images/dhl-1.svg"
+        logoAlt="DHL"
+        accentGradient="from-[#FFCC00] via-[#FFCC00] to-[#D40511]"
+        title="Rastreo DHL"
+        description="Consulta el estatus y el historial de tu guía en tiempo real."
+        inputLabel="Número de guía"
+        placeholder="Ej. 1234567890"
+        helperText="Ingresa el número de guía de DHL sin espacios ni guiones. Guias de prueba: 2670982436"
+        inputId="dhl-tracking"
+        inputMode="numeric"
+        value={tn}
+        onChange={setTn}
+        onSubmit={onSearch}
+        loading={loading}
+      />
 
       {error && (
         <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">

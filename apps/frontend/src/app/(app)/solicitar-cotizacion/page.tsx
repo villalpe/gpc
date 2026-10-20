@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -18,6 +18,7 @@ import {
   Target,
   Trash2,
   Truck,
+  X,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
@@ -38,7 +39,7 @@ type QuoteOption = {
   mode: "parcel" | "freight";
   fulfillment_level: string | null;
   requires_origin_verification: boolean;
-  price?: string; // total del envío (todos los paquetes). Solo para roles con permiso
+  price?: string;
   price_breakdown?: {
     amount?: string | null;
     vat_fee?: string | null;
@@ -86,7 +87,7 @@ type SavedAddress = Address & { id: string; label: string };
 
 type PackageItem = {
   id: string;
-  templateId: string; // "" = personalizado
+  templateId: string;
   length: string;
   width: string;
   height: string;
@@ -104,9 +105,8 @@ type PackageTemplate = {
   weight: string;
 };
 
-/* ───────────── Datos locales (luego vendrán de Django) ───────────── */
+/* ───────────── Datos locales ───────────── */
 
-// TODO(Django): GET /api/addresses/saved/?kind=origin|destination
 const SAVED_ADDRESSES: SavedAddress[] = [
   {
     id: "bodega-mty",
@@ -128,7 +128,6 @@ const SAVED_ADDRESSES: SavedAddress[] = [
   },
 ];
 
-// TODO(Django): GET /api/packages/templates/
 const PACKAGE_TEMPLATES: PackageTemplate[] = [
   { id: "caja_chica", name: "Caja de cartón chica", length: "30", width: "20", height: "15", weight: "2" },
   { id: "caja_mediana", name: "Caja de cartón mediana", length: "40", width: "30", height: "20", weight: "8" },
@@ -137,6 +136,17 @@ const PACKAGE_TEMPLATES: PackageTemplate[] = [
 
 const VOLUMETRIC_FACTOR = 5000;
 const EMPTY_ADDRESS: Address = { country: "MX", zip: "", state: "", city: "", area: "" };
+
+/* ───────────── Estilos reutilizables ───────────── */
+
+const FIELD_BASE =
+  "w-full rounded-xl border px-4 py-2.5 text-sm font-medium outline-none transition " +
+  "border-slate-400/70 bg-slate-50 text-slate-900 placeholder:font-normal placeholder:text-slate-400 " +
+  "hover:border-slate-500 focus:border-[#C1374A] focus:bg-white focus:ring-4 focus:ring-[#C1374A]/15 " +
+  "dark:border-white/25 dark:bg-slate-900/60 dark:text-white dark:placeholder:text-white/35 " +
+  "dark:hover:border-white/40 dark:focus:border-[#FF5A6B] dark:focus:bg-slate-900 dark:focus:ring-[#FF5A6B]/20";
+
+const LABEL_BASE = "mb-1.5 block text-sm font-semibold text-slate-700 dark:text-white/85";
 
 /* ───────────── Helpers ───────────── */
 
@@ -173,6 +183,7 @@ function formatPrice(opt: QuoteOption) {
 
 export default function QuotePage() {
   const idCounter = useRef(0);
+
   const newPackage = (): PackageItem => {
     idCounter.current += 1;
     return {
@@ -192,18 +203,7 @@ export default function QuotePage() {
   const [originSavedId, setOriginSavedId] = useState("");
   const [destSavedId, setDestSavedId] = useState("");
 
-  const [packages, setPackages] = useState<PackageItem[]>(() => [
-    {
-      id: "pkg-0",
-      templateId: "",
-      length: "",
-      width: "",
-      height: "",
-      weight: "",
-      declaredValue: "",
-      protectedPkg: false,
-    },
-  ]);
+  const [packages, setPackages] = useState<PackageItem[]>(() => [newPackage()]);
 
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -215,14 +215,14 @@ export default function QuotePage() {
   const [quotationId, setQuotationId] = useState<string | null>(null);
   const [selectedRateId, setSelectedRateId] = useState<string | null>(null);
 
-  /* Pesos totales */
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [creatingShipment, setCreatingShipment] = useState(false);
+  const [shipmentError, setShipmentError] = useState("");
+
   const totals = useMemo(() => {
     const real = packages.reduce((acc, p) => acc + Number(p.weight || 0), 0);
     const vol = packages.reduce((acc, p) => acc + volumetricOf(p), 0);
-    const chargeable = packages.reduce(
-      (acc, p) => acc + Math.max(Number(p.weight || 0), volumetricOf(p)),
-      0,
-    );
+    const chargeable = packages.reduce((acc, p) => acc + Math.max(Number(p.weight || 0), volumetricOf(p)), 0);
     return { real, vol, chargeable };
   }, [packages]);
 
@@ -231,12 +231,10 @@ export default function QuotePage() {
   const isValid = isRouteValid && arePackagesValid;
 
   const selectedOption = useMemo(
-    () =>
-      [...quoteParcelOptions, ...quoteFreightOptions].find((o) => o.rate_id === selectedRateId) ?? null,
+    () => [...quoteParcelOptions, ...quoteFreightOptions].find((o) => o.rate_id === selectedRateId) ?? null,
     [quoteParcelOptions, quoteFreightOptions, selectedRateId],
   );
 
-  /* Acciones de paquetes */
   function addPackage() {
     setPackages((prev) => [...prev, newPackage()]);
   }
@@ -273,7 +271,6 @@ export default function QuotePage() {
     });
   }
 
-  /* Direcciones guardadas */
   function applySavedAddress(kind: "origin" | "destination", savedId: string) {
     const saved = SAVED_ADDRESSES.find((a) => a.id === savedId);
     const next: Address = saved
@@ -288,7 +285,6 @@ export default function QuotePage() {
     }
   }
 
-  /* Submit: UN solo request con todos los paquetes */
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setSuccess(false);
@@ -298,6 +294,8 @@ export default function QuotePage() {
     setServerWeight(null);
     setQuotationId(null);
     setSelectedRateId(null);
+    setSummaryOpen(false);
+    setShipmentError("");
 
     if (!isValid) {
       setError("Completa origen, destino y las medidas y peso de todos los paquetes.");
@@ -337,10 +335,7 @@ export default function QuotePage() {
         body: JSON.stringify(payload),
       });
 
-      const json = (await res.json().catch(() => null)) as
-        | QuoteResponse
-        | { message?: string; detail?: string }
-        | null;
+      const json = (await res.json().catch(() => null)) as QuoteResponse | { message?: string; detail?: string } | null;
 
       if (!res.ok) {
         const msg =
@@ -360,6 +355,43 @@ export default function QuotePage() {
       setError(err instanceof Error ? err.message : "No se pudo enviar la solicitud. Intenta nuevamente.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleCreateShipment() {
+    if (!selectedOption || !quotationId) return;
+    setCreatingShipment(true);
+    setShipmentError("");
+
+    try {
+      const payload = {
+        quotation_id: quotationId,
+        rate_id: selectedOption.rate_id,
+        origin,
+        destination,
+        parcels: packages.map((p) => ({
+          length: Number(p.length),
+          width: Number(p.width),
+          height: Number(p.height),
+          weight: Number(p.weight),
+          ...(p.declaredValue ? { declared_value: Number(p.declaredValue) } : {}),
+          ...(p.protectedPkg ? { package_protected: true } : {}),
+        })),
+      };
+
+      // TODO(Fase 2): conectar endpoint real para crear envío
+      // const res = await fetch("/api/shipments/skydropx", {
+      //   method: "POST",
+      //   headers: { "Content-Type": "application/json" },
+      //   body: JSON.stringify(payload),
+      // });
+      // if (!res.ok) throw new Error("No se pudo crear el envío.");
+
+      console.log("Payload crear envío (pendiente de endpoint):", payload);
+    } catch (err) {
+      setShipmentError(err instanceof Error ? err.message : "No se pudo crear el envío.");
+    } finally {
+      setCreatingShipment(false);
     }
   }
 
@@ -402,9 +434,9 @@ export default function QuotePage() {
         </div>
       </section>
 
-      {/* Qué evaluamos (a todo el ancho) */}
+      {/* Qué evaluamos */}
       <div className="mx-auto max-w-[1600px] px-4 pt-6 sm:px-6 lg:px-8">
-        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/15 dark:bg-white/[0.06]">
+        <article className="rounded-2xl border border-slate-300 bg-white p-5 shadow-md dark:border-white/15 dark:bg-white/[0.06]">
           <h2 className="text-lg font-bold">¿Qué evaluamos por ti?</h2>
           <ul className="mt-3 grid gap-3 text-sm text-slate-600 dark:text-white/75 sm:grid-cols-2 lg:grid-cols-3">
             <li className="flex gap-2"><Truck className="mt-0.5 h-4 w-4 shrink-0 text-[#C1374A]" />Tiempo de tránsito estimado</li>
@@ -417,11 +449,7 @@ export default function QuotePage() {
         </article>
       </div>
 
-      {/*
-        Barra sticky de peso cobrable.
-        Debe ser hijo directo de <main> (sin ancestros con overflow-hidden) para que sticky funcione.
-        Si tu layout (app) tiene un navbar fijo, cambia top-0 por su altura (ej. top-16).
-      */}
+      {/* Barra sticky */}
       <div className="sticky top-0 z-30 mt-6 border-y border-slate-200 bg-white/90 backdrop-blur dark:border-white/10 dark:bg-[#0B1220]/90">
         <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2">
@@ -459,16 +487,17 @@ export default function QuotePage() {
         </div>
       </div>
 
-      {/* Formulario a todo el ancho */}
+      {/* Formulario */}
       <div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">
         <form
           onSubmit={onSubmit}
-          className="space-y-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/15 dark:bg-white/[0.06] md:p-6"
+          className="space-y-6 rounded-2xl border border-slate-300 bg-white p-5 shadow-md dark:border-white/15 dark:bg-white/[0.06] md:p-6"
         >
-          {/* Origen y Destino lado a lado */}
+          {/* Origen y Destino */}
           <div className="grid gap-6 lg:grid-cols-2">
             <AddressBlock
               title="Origen"
+              tone="origin"
               value={origin}
               onChange={(a) => {
                 setOrigin(a);
@@ -480,6 +509,7 @@ export default function QuotePage() {
 
             <AddressBlock
               title="Destino"
+              tone="destination"
               value={destination}
               onChange={(a) => {
                 setDestination(a);
@@ -491,9 +521,9 @@ export default function QuotePage() {
           </div>
 
           {/* Paquetes */}
-          <div className="space-y-3">
+          <div className="space-y-4 rounded-2xl border border-slate-300 bg-slate-50/70 p-4 dark:border-white/15 dark:bg-white/[0.04]">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-white/60">
+              <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-white/85">
                 Paquetes
               </h3>
               {packages.length > 1 && (
@@ -503,72 +533,126 @@ export default function QuotePage() {
               )}
             </div>
 
-            {packages.map((pkg, idx) => (
-              <article
-                key={pkg.id}
-                className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-white/15 dark:bg-white/[0.04]"
-              >
-                <div className="mb-3 flex items-center justify-between">
-                  <p className="text-sm font-semibold">Paquete {idx + 1}</p>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => duplicatePackage(pkg.id)}
-                      title="Duplicar paquete"
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 dark:border-white/20 dark:bg-white/10 dark:text-white"
-                    >
-                      <Copy className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removePackage(pkg.id)}
-                      disabled={packages.length === 1}
-                      title="Eliminar paquete"
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/20 dark:bg-white/10 dark:text-white"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
+            {packages.map((pkg, idx) => {
+              const pkgValid = isPackageValid(pkg);
 
-                <div className="grid gap-4 md:grid-cols-4 xl:grid-cols-6">
-                  <div className="md:col-span-4 xl:col-span-2">
-                    <Select
-                      label="Empaque o paquete guardado"
-                      value={pkg.templateId}
-                      onChange={(v) => applyTemplate(pkg.id, v)}
-                      options={[
-                        { label: "Personalizado", value: "" },
-                        ...PACKAGE_TEMPLATES.map((t) => ({ label: t.name, value: t.id })),
-                      ]}
+              return (
+                <article
+                  key={pkg.id}
+                  className={`rounded-xl border p-4 transition ${
+                    pkgValid
+                      ? "border-slate-300 bg-white dark:border-white/15 dark:bg-white/[0.06]"
+                      : "border-amber-300 bg-amber-50/40 dark:border-amber-400/30 dark:bg-amber-500/10"
+                  }`}
+                >
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">Paquete {idx + 1}</p>
+                      <p className="text-xs text-slate-500 dark:text-white/60">
+                        {pkgValid
+                          ? "Completo"
+                          : "Faltan datos de dimensiones o peso"}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => duplicatePackage(pkg.id)}
+                        title="Duplicar paquete"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-50 dark:border-white/20 dark:bg-white/10 dark:text-white"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removePackage(pkg.id)}
+                        disabled={packages.length === 1}
+                        title="Eliminar paquete"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/20 dark:bg-white/10 dark:text-white"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-4 xl:grid-cols-6">
+                    <div className="md:col-span-4 xl:col-span-2">
+                      <Select
+                        label="Empaque o paquete guardado"
+                        value={pkg.templateId}
+                        onChange={(v) => applyTemplate(pkg.id, v)}
+                        options={[
+                          { label: "Personalizado", value: "" },
+                          ...PACKAGE_TEMPLATES.map((t) => ({ label: t.name, value: t.id })),
+                        ]}
+                      />
+                    </div>
+
+                    <Input
+                      label="Largo (cm) *"
+                      type="number"
+                      placeholder="Ej. 40"
+                      value={pkg.length}
+                      onChange={(v) => updatePackage(pkg.id, { length: v, templateId: "" })}
                     />
-                  </div>
-
-                  <Input label="Largo (cm) *" type="number" placeholder="40" value={pkg.length}
-                    onChange={(v) => updatePackage(pkg.id, { length: v, templateId: "" })} />
-                  <Input label="Ancho (cm) *" type="number" placeholder="30" value={pkg.width}
-                    onChange={(v) => updatePackage(pkg.id, { width: v, templateId: "" })} />
-                  <Input label="Alto (cm) *" type="number" placeholder="20" value={pkg.height}
-                    onChange={(v) => updatePackage(pkg.id, { height: v, templateId: "" })} />
-                  <Input label="Peso (kg) *" type="number" placeholder="8" value={pkg.weight}
-                    onChange={(v) => updatePackage(pkg.id, { weight: v, templateId: "" })} />
-
-                  <div className="md:col-span-2">
-                    <Input label="Valor declarado (MXN)" type="number" placeholder="2500" value={pkg.declaredValue}
-                      onChange={(v) => updatePackage(pkg.id, { declaredValue: v })} />
-                  </div>
-                  <label className="flex items-center gap-2 text-sm md:col-span-2 md:pt-6">
-                    <input
-                      type="checkbox"
-                      checked={pkg.protectedPkg}
-                      onChange={(e) => updatePackage(pkg.id, { protectedPkg: e.target.checked })}
-                      className="h-4 w-4 rounded border-slate-300"
+                    <Input
+                      label="Ancho (cm) *"
+                      type="number"
+                      placeholder="Ej. 30"
+                      value={pkg.width}
+                      onChange={(v) => updatePackage(pkg.id, { width: v, templateId: "" })}
                     />
-                    Protección (seguro)
-                  </label>
-                </div>
-              </article>
-            ))}
+                    <Input
+                      label="Alto (cm) *"
+                      type="number"
+                      placeholder="Ej. 20"
+                      value={pkg.height}
+                      onChange={(v) => updatePackage(pkg.id, { height: v, templateId: "" })}
+                    />
+                    <Input
+                      label="Peso (kg) *"
+                      type="number"
+                      placeholder="Ej. 8"
+                      value={pkg.weight}
+                      onChange={(v) => updatePackage(pkg.id, { weight: v, templateId: "" })}
+                    />
+
+                    <div className="md:col-span-2">
+                      <Input
+                        label="Valor declarado (MXN)"
+                        type="number"
+                        placeholder="Ej. 2500"
+                        value={pkg.declaredValue}
+                        onChange={(v) => updatePackage(pkg.id, { declaredValue: v })}
+                      />
+                    </div>
+
+                    <label className="flex items-center gap-2 rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 md:col-span-2 md:mt-[30px] dark:border-white/20 dark:bg-slate-900/50 dark:text-white/85">
+                      <input
+                        type="checkbox"
+                        checked={pkg.protectedPkg}
+                        onChange={(e) => updatePackage(pkg.id, { protectedPkg: e.target.checked })}
+                        className="h-4 w-4 rounded border-slate-300 accent-[#C1374A]"
+                      />
+                      Protección (seguro)
+                    </label>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700 dark:bg-white/10 dark:text-white/75">
+                      Peso real: <strong>{Number(pkg.weight || 0).toFixed(2)} kg</strong>
+                    </span>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700 dark:bg-white/10 dark:text-white/75">
+                      Volumétrico: <strong>{volumetricOf(pkg).toFixed(2)} kg</strong>
+                    </span>
+                    <span className="rounded-full bg-[#C1374A]/10 px-2.5 py-1 text-[#C1374A] dark:text-[#FF9AAA]">
+                      Cobrable: <strong>{Math.max(Number(pkg.weight || 0), volumetricOf(pkg)).toFixed(2)} kg</strong>
+                    </span>
+                  </div>
+                </article>
+              );
+            })}
 
             <button
               type="button"
@@ -616,20 +700,37 @@ export default function QuotePage() {
 
           {/* Resultados */}
           {hasResults && (
-            <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/15 dark:bg-white/[0.04]">
+            <div className="space-y-4 rounded-2xl border border-slate-300 bg-slate-50 p-4 dark:border-white/15 dark:bg-white/[0.04]">
               <h4 className="flex items-center gap-2 text-base font-bold">
                 <BadgeDollarSign className="h-4 w-4 text-[#C1374A]" />
                 Opciones de cotización
               </h4>
 
               {quoteParcelOptions.length > 0 && (
-                <OptionList title="Paquetería" options={quoteParcelOptions}
-                  selectedRateId={selectedRateId} onSelect={setSelectedRateId} highlightFirst />
+                <OptionList
+                  title="Paquetería"
+                  options={quoteParcelOptions}
+                  selectedRateId={selectedRateId}
+                  onSelect={(id) => {
+                    setSelectedRateId(id);
+                    setShipmentError("");
+                    setSummaryOpen(true);
+                  }}
+                  highlightFirst
+                />
               )}
 
               {quoteFreightOptions.length > 0 && (
-                <OptionList title="Carga" options={quoteFreightOptions}
-                  selectedRateId={selectedRateId} onSelect={setSelectedRateId} />
+                <OptionList
+                  title="Carga"
+                  options={quoteFreightOptions}
+                  selectedRateId={selectedRateId}
+                  onSelect={(id) => {
+                    setSelectedRateId(id);
+                    setShipmentError("");
+                    setSummaryOpen(true);
+                  }}
+                />
               )}
 
               {selectedOption && (
@@ -645,14 +746,31 @@ export default function QuotePage() {
                     {totals.chargeable.toFixed(2)} kg cobrables
                   </p>
                   <p className="mt-2 text-xl font-bold text-[#C1374A]">{formatPrice(selectedOption)}</p>
-                  {/* Paso 2: aquí irá "Crear envío" usando quotationId + selectedRateId */}
-                  <p className="mt-1 text-[10px] text-slate-400">
-                    quotation: {quotationId ?? "-"} · rate: {selectedOption.rate_id}
-                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setSummaryOpen(true)}
+                    className="mt-3 h-9 rounded-lg bg-[#C1374A] px-4 text-xs font-semibold text-white transition hover:bg-[#9F2436]"
+                  >
+                    Ver resumen y continuar
+                  </button>
                 </div>
               )}
             </div>
           )}
+
+          <ShipmentSummaryModal
+            open={summaryOpen && !!selectedOption}
+            onClose={() => setSummaryOpen(false)}
+            origin={origin}
+            destination={destination}
+            packages={packages}
+            option={selectedOption}
+            totals={totals}
+            quotationId={quotationId}
+            creating={creatingShipment}
+            error={shipmentError}
+            onConfirm={handleCreateShipment}
+          />
         </form>
       </div>
     </main>
@@ -663,12 +781,14 @@ export default function QuotePage() {
 
 function AddressBlock({
   title,
+  tone,
   value,
   onChange,
   savedId,
   onSelectSaved,
 }: {
   title: string;
+  tone: "origin" | "destination";
   value: Address;
   onChange: (a: Address) => void;
   savedId: string;
@@ -676,11 +796,35 @@ function AddressBlock({
 }) {
   const set = (patch: Partial<Address>) => onChange({ ...value, ...patch });
 
+  const styles =
+    tone === "origin"
+      ? {
+          card: "border-[#C1374A]/25 bg-[#C1374A]/[0.04] dark:border-[#FF5A6B]/25 dark:bg-[#FF5A6B]/[0.05]",
+          bar: "bg-[#C1374A]",
+          badge: "bg-[#C1374A] text-white",
+          title: "text-[#9F2436] dark:text-[#FF9AAA]",
+          num: "1",
+        }
+      : {
+          card: "border-[#5B6F99]/30 bg-[#5B6F99]/[0.05] dark:border-[#7C8FB8]/30 dark:bg-[#7C8FB8]/[0.06]",
+          bar: "bg-[#5B6F99] dark:bg-[#7C8FB8]",
+          badge: "bg-[#5B6F99] text-white dark:bg-[#7C8FB8] dark:text-slate-900",
+          title: "text-[#3F5078] dark:text-[#B4C2E2]",
+          num: "2",
+        };
+
   return (
-    <div className="space-y-3">
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-white/60">
-        {title}
-      </h3>
+    <div className={`relative space-y-4 overflow-hidden rounded-2xl border p-5 pl-6 ${styles.card}`}>
+      <span className={`absolute inset-y-0 left-0 w-1.5 ${styles.bar}`} aria-hidden />
+      <div className="flex items-center gap-2.5">
+        <span
+          className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${styles.badge}`}
+        >
+          {styles.num}
+        </span>
+        <h3 className={`text-sm font-bold uppercase tracking-wide ${styles.title}`}>{title}</h3>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <Select
@@ -693,12 +837,12 @@ function AddressBlock({
             ]}
           />
         </div>
-        <Input label="C.P. *" value={value.zip} onChange={(v) => set({ zip: v })} placeholder="64000" />
-        <Input label="País (ISO) *" value={value.country} onChange={(v) => set({ country: v })} placeholder="MX" />
-        <Input label="Estado *" value={value.state} onChange={(v) => set({ state: v })} placeholder="Nuevo León" />
-        <Input label="Ciudad *" value={value.city} onChange={(v) => set({ city: v })} placeholder="Monterrey" />
+        <Input label="C.P. *" value={value.zip} onChange={(v) => set({ zip: v })} placeholder="Ej. 64000" />
+        <Input label="País (ISO) *" value={value.country} onChange={(v) => set({ country: v })} placeholder="Ej. MX" />
+        <Input label="Estado *" value={value.state} onChange={(v) => set({ state: v })} placeholder="Ej. Nuevo León" />
+        <Input label="Ciudad *" value={value.city} onChange={(v) => set({ city: v })} placeholder="Ej. Monterrey" />
         <div className="sm:col-span-2">
-          <Input label="Colonia/Área *" value={value.area} onChange={(v) => set({ area: v })} placeholder="Centro" />
+          <Input label="Colonia/Área *" value={value.area} onChange={(v) => set({ area: v })} placeholder="Ej. Centro" />
         </div>
       </div>
     </div>
@@ -746,7 +890,7 @@ function OptionList({
                   ? "border-[#C1374A] bg-white ring-2 ring-[#C1374A]/20 dark:bg-white/[0.1]"
                   : highlightFirst && idx === 0
                     ? "border-[#C1374A]/40 bg-white dark:border-[#FF8FA1]/45 dark:bg-white/[0.08]"
-                    : "border-slate-200 bg-white dark:border-white/15 dark:bg-white/[0.06]"
+                    : "border-slate-300 bg-white dark:border-white/15 dark:bg-white/[0.06]"
               }`}
             >
               <div className="min-w-0">
@@ -812,13 +956,13 @@ function Input({
 }) {
   return (
     <div>
-      <label className="mb-1.5 block text-sm font-medium">{label}</label>
+      <label className={LABEL_BASE}>{label}</label>
       <input
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#FF5A6B] focus:ring-4 focus:ring-[#FF5A6B]/15 dark:border-white/20 dark:bg-slate-900/60 dark:text-white"
+        className={FIELD_BASE}
       />
     </div>
   );
@@ -837,18 +981,188 @@ function Select<T extends string>({
 }) {
   return (
     <div>
-      <label className="mb-1.5 block text-sm font-medium">{label}</label>
+      <label className={LABEL_BASE}>{label}</label>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value as T)}
-        className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#FF5A6B] focus:ring-4 focus:ring-[#FF5A6B]/15 dark:border-white/20 dark:bg-slate-900/60 dark:text-white"
+        className={`${FIELD_BASE} ${value === "" ? "text-slate-500 dark:text-white/60" : ""}`}
       >
         {options.map((o) => (
-          <option key={o.value} value={o.value}>
+          <option key={o.value} value={o.value} className="text-slate-900">
             {o.label}
           </option>
         ))}
       </select>
+    </div>
+  );
+}
+
+function ShipmentSummaryModal({
+  open,
+  onClose,
+  origin,
+  destination,
+  packages,
+  option,
+  totals,
+  quotationId,
+  creating,
+  error,
+  onConfirm,
+}: {
+  open: boolean;
+  onClose: () => void;
+  origin: Address;
+  destination: Address;
+  packages: PackageItem[];
+  option: QuoteOption | null;
+  totals: { real: number; vol: number; chargeable: number };
+  quotationId: string | null;
+  creating: boolean;
+  error: string;
+  onConfirm: () => void;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !creating && onClose();
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [open, creating, onClose]);
+
+  if (!open || !option) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={() => !creating && onClose()}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="summary-title"
+    >
+      <div
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-white/15 dark:bg-[#0B1220]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-white/60">
+              Resumen final
+            </p>
+            <h2 id="summary-title" className="text-lg font-bold">
+              Confirma tu envío
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={creating}
+            aria-label="Cerrar"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-40 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="rounded-xl border border-slate-200 p-3 dark:border-white/15">
+            <p className="text-xs font-semibold uppercase text-slate-500 dark:text-white/60">Origen</p>
+            <p className="mt-1 text-sm">
+              {origin.area}, {origin.city}, {origin.state}, C.P. {origin.zip}, {origin.country}
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 p-3 dark:border-white/15">
+            <p className="text-xs font-semibold uppercase text-slate-500 dark:text-white/60">Destino</p>
+            <p className="mt-1 text-sm">
+              {destination.area}, {destination.city}, {destination.state}, C.P. {destination.zip}, {destination.country}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-slate-200 p-3 dark:border-white/15">
+          <p className="text-xs font-semibold uppercase text-slate-500 dark:text-white/60">
+            Paquetes ({packages.length})
+          </p>
+          <ul className="mt-2 divide-y divide-slate-100 text-sm dark:divide-white/10">
+            {packages.map((p, i) => (
+              <li key={p.id} className="flex flex-wrap justify-between gap-2 py-1.5">
+                <span>
+                  {i + 1}. {p.length} × {p.width} × {p.height} cm
+                </span>
+                <span className="text-slate-600 dark:text-white/70">
+                  {p.weight} kg
+                  {p.declaredValue ? ` · Valor $${p.declaredValue}` : ""}
+                  {p.protectedPkg ? " · Con seguro" : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+          <div className="rounded-xl bg-slate-50 p-3 dark:bg-white/[0.05]">
+            <p className="text-xs text-slate-500 dark:text-white/60">Real</p>
+            <p className="text-sm font-bold">{totals.real.toFixed(2)} kg</p>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-3 dark:bg-white/[0.05]">
+            <p className="text-xs text-slate-500 dark:text-white/60">Volumétrico</p>
+            <p className="text-sm font-bold">{totals.vol.toFixed(2)} kg</p>
+          </div>
+          <div className="rounded-xl bg-[#C1374A]/10 p-3">
+            <p className="text-xs text-slate-500 dark:text-white/60">Cobrable</p>
+            <p className="text-sm font-bold text-[#C1374A]">{totals.chargeable.toFixed(2)} kg</p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#C1374A]/40 bg-[#C1374A]/5 p-4">
+          <div>
+            <p className="text-sm font-semibold">{option.carrier}</p>
+            <p className="text-xs text-slate-600 dark:text-white/70">{option.service}</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-white/60">
+              {option.estimated_days ?? "-"} día(s) ·{" "}
+              {option.delivery_type === "ocurre" ? "Entrega en sucursal (ocurre)" : "Entrega a domicilio"} · Recolección{" "}
+              {option.pickup_available ? "disponible" : "no disponible"}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-slate-500 dark:text-white/60">Precio estimado</p>
+            <p className="text-xl font-bold text-[#C1374A]">{formatPrice(option)}</p>
+          </div>
+        </div>
+
+        <p className="mt-2 text-[10px] text-slate-400">
+          quotation: {quotationId ?? "-"} · rate: {option.rate_id}
+        </p>
+
+        {error && (
+          <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-400/30 dark:bg-rose-500/10 dark:text-rose-300">
+            {error}
+          </p>
+        )}
+
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={creating}
+            className="h-10 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
+          >
+            Cambiar opción
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={creating || !quotationId}
+            className="h-10 rounded-xl bg-[#C1374A] px-5 text-sm font-semibold text-white transition hover:bg-[#9F2436] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {creating ? "Creando envío..." : "Crear envío"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

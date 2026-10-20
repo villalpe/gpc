@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ArrowRight, Search } from "lucide-react";
 import Image from "next/image";
+import TrackingHeader from "@/components/tracking/TrackingHeader";
 
 type Nullable<T> = T | null | undefined;
 
@@ -366,35 +367,25 @@ export default function RastreoCargobasePage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div className="flex items-center gap-3">
-        <Image
-          src="/images/cargobase.svg"
-          alt="Cargobase"
-          width={42}
-          height={42}
-          className="h-20 w-42 object-contain"
-          priority
-        />
-        <h1 className="text-2xl font-bold">Solicitud y quotes</h1>
-      </div>
-
-      <form onSubmit={onSearch} className="flex gap-2">
-        <input
-          value={requestId}
-          onChange={(event) => setRequestId(event.target.value)}
-          placeholder="CB number (ej. S136951885)"
-          maxLength={10}
-          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm uppercase outline-none focus:border-[#FF5A6B] focus:ring-4 focus:ring-[#FF5A6B]/15 dark:border-white/20 dark:bg-slate-900/70"
-        />
-        <button
-          type="submit"
-          disabled={loading}
-          className="inline-flex items-center gap-2 rounded-xl bg-[#C1374A] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#9F2436] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <Search className="h-4 w-4" />
-          {loading ? "Buscando..." : "Buscar"}
-        </button>
-      </form>
+      <TrackingHeader
+        logoSrc="/images/cargobase.svg"
+        logoAlt="Cargobase"
+        accentGradient="from-[#C1374A] via-[#C1374A] to-[#5B6F99]"
+        eyebrow="Solicitudes y cotizaciones"
+        title="Solicitud y quotes"
+        description="Consulta el detalle de la solicitud y las quotes por CB number."
+        inputLabel="CB number"
+        placeholder="Ej. S136951885"
+        helperText="Formato: la letra S seguida de 9 dígitos. CB numeros de prueba: S136951885, S833950886"
+        buttonLabel="Buscar"
+        inputId="cargobase-request"
+        maxLength={10}
+        uppercase
+        value={requestId}
+        onChange={setRequestId}
+        onSubmit={onSearch}
+        loading={loading}
+      />
 
       {error && (
         <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
@@ -499,41 +490,7 @@ export default function RastreoCargobasePage() {
           </article>
 
           <article className={card}>
-            <h2 className="mb-3 font-semibold">Detalles de la organización</h2>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Field label="Centro de costos">{val(org.cost_center)}</Field>
-              <Field label="Código de razón">{val(org.reason_code)}</Field>
-              <Field label="Grupo de código de razón">{val(org.reason_code_group)}</Field>
-              <Field label="Campo personalizado 1">{val(org.custom_field1)}</Field>
-              <Field label="Campo personalizado 2">{val(org.custom_field2)}</Field>
-              <Field label="Campo personalizado 3">{val(org.custom_field3)}</Field>
-              <Field label="Campo largo personalizado">{val(org.custom_longfield_01)}</Field>
-              <Field label="Recuperación de costos requerida">{val(org.cost_recovery_required)}</Field>
-              <Field label="Recuperación de costos 1">{val(org.custom_cost_recovery_field1)}</Field>
-              <Field label="Recuperación de costos 2">{val(org.custom_cost_recovery_field2)}</Field>
-              <Field label="Tipo de confirmación de mercancía">{val(org.goods_confirmation_type)}</Field>
-              <Field label="Moneda">{val(org.shipment_currency)}</Field>
-              <Field label="CBM solicitado">{val(org.requested_cbm)}</Field>
-              <Field label="Lugar de pago">{val(org.payment_location)}</Field>
-              <Field label="Fecha límite de cotización">{val(org.quoting_deadline_date)}</Field>
-              <Field label="Hora límite">{val(org.quoting_deadline_time)}</Field>
-              <Field label="Offset UTC">{val(org.quoting_deadline_utc_offset)}</Field>
-              <Field label="Tiempo restante (cotización)">
-                {val(org.quoting_deadline_remaining_time_display)}
-              </Field>
-              <Field label="Fecha de confirmación">{val(org.confirmation_date)}</Field>
-              <Field label="Hora de confirmación">{val(org.confirmation_time)}</Field>
-              <Field label="Tiempo restante (confirmación)">
-                {val(org.confirmation_remaining_time_display)}
-              </Field>
-              <div className="sm:col-span-3">
-                <Field label="Comentarios adicionales">{val(org.additional_comments)}</Field>
-              </div>
-            </div>
-          </article>
-
-          <article className={card}>
-            <h2 className="mb-3 font-semibold">Itinerario</h2>
+            <h2 className="mb-3 font-semibold">Programación</h2>
             <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:items-center">
               <PointCard title="Recolección" p={pickup} />
               <ArrowRight className="h-5 w-5 shrink-0 rotate-90 self-center lg:rotate-0" />

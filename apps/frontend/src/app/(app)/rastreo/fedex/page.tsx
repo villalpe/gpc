@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ArrowRight, MapPin, PackageCheck, Search, Truck } from "lucide-react";
 import Image from "next/image";
+import TrackingHeader from "@/components/tracking/TrackingHeader";
 
 type Loc = {
   city?: string;
@@ -243,35 +244,23 @@ export default function RastreoFedexPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div className="flex items-center gap-3">
-        <Image
-          src="/images/fedex-ar21.svg"
-          alt="FedEx"
-          width={42}
-          height={42}
-          className="h-20 w-42 object-contain"
-          priority
-        />
-        <h1 className="text-4xl font-bold">Rastreo </h1>
-      </div>
-
-      <form onSubmit={onSearch} className="flex gap-2">
-        <input
-          value={trackingNumber}
-          onChange={(event) => setTrackingNumber(event.target.value)}
-          placeholder="Número de guía"
-          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#FF5A6B] focus:ring-4 focus:ring-[#FF5A6B]/15 dark:border-white/20 dark:bg-slate-900/70"
-        />
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="inline-flex items-center gap-2 rounded-xl bg-[#C1374A] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#9F2436] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <Search className="h-4 w-4" />
-          {loading ? "Buscando..." : "Rastrear"}
-        </button>
-      </form>
+      <TrackingHeader
+        logoSrc="/images/fedex-ar21.svg"
+        logoAlt="FedEx"
+        accentGradient="from-[#4D148C] via-[#4D148C] to-[#FF6600]"
+        title="Rastreo FedEx"
+        description="Consulta el estatus y el historial de tu guía en tiempo real."
+        inputLabel="Número de guía"
+        placeholder="Ej. 794612345678"
+        helperText="Ingresa el número de guía de FedEx sin espacios ni guiones. Guias de prueba: 794612345678, 612999956097"
+        inputId="fedex-tracking"
+        inputMode="numeric"
+        value={trackingNumber}
+        onChange={setTrackingNumber}
+        onSubmit={onSearch}
+        loading={loading}
+        showStatusBadge={!!result}
+      />
 
       {error && (
         <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
