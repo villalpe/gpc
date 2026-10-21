@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Customer, QuoteRequest
+from .models import Customer, QuoteRequest, SavedAddress, SavedPackage, Shipment
 
 PRICE_KEYS = ("price", "price_breakdown", "total_value_with_protection")
 
@@ -154,3 +154,119 @@ class QuoteOutputSerializer(serializers.ModelSerializer):
             "city": obj.dest_city,
             "area": obj.dest_area,
         }
+
+class SavedAddressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SavedAddress
+        fields = [
+            "id",
+            "kind",
+            "label",
+            "client_name",
+            "client_phone",
+            "contact_name",
+            "contact_phone",
+            "contact_email",
+            "company_name",
+            "country",
+            "postal_code",
+            "state",
+            "city",
+            "area",
+            "street",
+            "exterior_number",
+            "interior_number",
+            "reference",
+            "additional_info",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate_country(self, value):
+        value = value.strip().upper()
+        if value != "MX":
+            raise serializers.ValidationError("Solo se soporta país MX por ahora.")
+        return value   
+        
+class SavedPackageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SavedPackage
+        fields = [
+            "id", "label", "length_cm", "width_cm", "height_cm", "weight_kg",
+            "contents_description", "consignment_note", "packaging_type",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+
+class ShipmentAddressSerializer(serializers.Serializer):
+    country_code = serializers.CharField(max_length=2)
+    postal_code = serializers.CharField(min_length=4, max_length=12)
+    state = serializers.CharField(max_length=80)
+    city = serializers.CharField(max_length=80)
+    area = serializers.CharField(max_length=120)
+    client_name = serializers.CharField(max_length=150)
+    client_phone = serializers.CharField(max_length=30)
+    street = serializers.CharField(max_length=180)
+    exterior_number = serializers.CharField(max_length=30)
+    interior_number = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    reference = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    additional_info = serializers.CharField(required=False, allow_blank=True)
+    contact_name = serializers.CharField(max_length=150)
+    contact_phone = serializers.CharField(max_length=30)
+    contact_email = serializers.EmailField()
+    company_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    saved_address_id = serializers.IntegerField(required=False, allow_null=True)
+
+    def validate_country_code(self, value):
+        value = value.strip().upper()
+        if value != "MX":
+            raise serializers.ValidationError("Solo se soporta país MX por ahora.")
+        return value
+
+
+class ShipmentParcelInputSerializer(ParcelInputSerializer):
+    contents_description = serializers.CharField(max_length=255)
+    consignment_note = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    packaging_type = serializers.CharField(max_length=10, required=False, allow_blank=True)
+    saved_package_id = serializers.IntegerField(required=False, allow_null=True)
+
+
+class ShipmentCreateSerializer(serializers.Serializer):
+    quotation_id = serializers.CharField(max_length=100)
+    rate_id = serializers.CharField(max_length=100)
+    origin = ShipmentAddressSerializer()
+    destination = ShipmentAddressSerializer()
+    parcels = ShipmentParcelInputSerializer(many=True, allow_empty=False)
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+
+class ShipmentOutputSerializer(serializers.ModelSerializer):
+    parcels = serializers.SerializerMethodField()
+    rate = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Shipment
+        fields = [
+            "id", "status", "provider", "provider_quotation_id", "rate_id",
+            "carrier", "service", "estimated_days", "origin", "destination",
+            "weight_summary", "parcels", "rate", "notes", "created_at",
+        ]
+
+    def get_parcels(self, obj):
+        return [
+            {
+                "length_cm": p.length_cm, "width_cm": p.width_cm, "height_cm": p.height_cm,
+                "weight_kg": p.weight_kg, "declared_value": p.declared_value,
+                "package_protected": p.package_protected,
+                "contents_description": p.contents_description,
+                "consignment_note": p.consignment_note,
+                "packaging_type": p.packaging_type,
+            }
+            for p in obj.parcels.all()
+        ]
+
+    def get_rate(self, obj):
+        rate = obj.rate_snapshot or {}
+        return rate if self.context.get("show_price", False) else strip_price_fields(rate)             

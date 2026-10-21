@@ -147,3 +147,157 @@ class QuoteParcel(models.Model):
 
     def __str__(self):
         return f"QuoteParcel #{self.id} (quote {self.quote_id})"
+
+class SavedAddress(models.Model):
+    KIND_CHOICES = [
+        ("origin", "Origen"),
+        ("destination", "Destino"),
+    ]
+
+    company = models.ForeignKey(
+        "companies.Company",
+        on_delete=models.CASCADE,
+        related_name="saved_addresses",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="saved_addresses",
+    )
+
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES)
+    label = models.CharField(max_length=120, blank=True, default="")
+
+    # Datos "cliente/remitente/destinatario" según contexto de uso
+    client_name = models.CharField(max_length=150, blank=True, default="")
+    client_phone = models.CharField(max_length=30, blank=True, default="")
+    contact_name = models.CharField(max_length=150, blank=True, default="")
+    contact_phone = models.CharField(max_length=30, blank=True, default="")
+    contact_email = models.EmailField(blank=True, default="")
+    company_name = models.CharField(max_length=150, blank=True, default="")
+
+    # Dirección
+    country = models.CharField(max_length=2, default="MX")
+    postal_code = models.CharField(max_length=12)
+    state = models.CharField(max_length=80)
+    city = models.CharField(max_length=80)
+    area = models.CharField(max_length=120)
+    street = models.CharField(max_length=180, blank=True, default="")
+    exterior_number = models.CharField(max_length=30, blank=True, default="")
+    interior_number = models.CharField(max_length=30, blank=True, default="")
+    reference = models.CharField(max_length=200, blank=True, default="")
+    additional_info = models.TextField(blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        indexes = [
+            models.Index(fields=["company", "kind"]),
+            models.Index(fields=["company", "postal_code"]),
+        ]
+
+    def __str__(self):
+        return f"SavedAddress #{self.id} ({self.kind}) - {self.label or self.postal_code}"
+
+class SavedPackage(models.Model):
+    company = models.ForeignKey(
+        "companies.Company", on_delete=models.CASCADE, related_name="saved_packages"
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="saved_packages",
+    )
+    label = models.CharField(max_length=120)
+    length_cm = models.PositiveIntegerField()
+    width_cm = models.PositiveIntegerField()
+    height_cm = models.PositiveIntegerField()
+    weight_kg = models.DecimalField(max_digits=10, decimal_places=3)
+    contents_description = models.CharField(max_length=255)
+    consignment_note = models.CharField(max_length=20, blank=True, default="")
+    packaging_type = models.CharField(max_length=10, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        indexes = [models.Index(fields=["company"])]
+
+    def __str__(self):
+        return f"SavedPackage #{self.id} - {self.label}"
+
+
+class Shipment(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pendiente"),
+        ("booked", "Guía generada"),
+        ("canceled", "Cancelado"),
+    ]
+
+    company = models.ForeignKey(
+        "companies.Company", on_delete=models.CASCADE, related_name="shipments"
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="shipments",
+    )
+    quote = models.ForeignKey(
+        QuoteRequest, on_delete=models.SET_NULL, null=True, blank=True, related_name="shipments"
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+
+    provider = models.CharField(max_length=30, default="skydropx")
+    provider_quotation_id = models.CharField(max_length=100)
+    rate_id = models.CharField(max_length=100)
+    carrier = models.CharField(max_length=80, blank=True, default="")
+    service = models.CharField(max_length=120, blank=True, default="")
+    estimated_days = models.IntegerField(null=True, blank=True)
+    rate_snapshot = models.JSONField(default=dict)  # incluye precio; solo staff
+
+    origin = models.JSONField(default=dict)
+    destination = models.JSONField(default=dict)
+    origin_address = models.ForeignKey(
+        SavedAddress, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    destination_address = models.ForeignKey(
+        SavedAddress, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+
+    weight_summary = models.JSONField(default=dict)
+    notes = models.TextField(blank=True, default="")
+
+    # Para la fase de guías
+    provider_shipment_id = models.CharField(max_length=100, blank=True, default="")
+    tracking_number = models.CharField(max_length=60, blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["company", "status"])]
+
+    def __str__(self):
+        return f"Shipment #{self.id} ({self.status})"
+
+
+class ShipmentParcel(models.Model):
+    shipment = models.ForeignKey(Shipment, on_delete=models.CASCADE, related_name="parcels")
+    saved_package = models.ForeignKey(
+        SavedPackage, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    length_cm = models.PositiveIntegerField()
+    width_cm = models.PositiveIntegerField()
+    height_cm = models.PositiveIntegerField()
+    weight_kg = models.DecimalField(max_digits=10, decimal_places=3)
+    declared_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    package_protected = models.BooleanField(default=False)
+    contents_description = models.CharField(max_length=255)
+    consignment_note = models.CharField(max_length=20, blank=True, default="")
+    packaging_type = models.CharField(max_length=10, blank=True, default="")
+
+    class Meta:
+        ordering = ["id"]        

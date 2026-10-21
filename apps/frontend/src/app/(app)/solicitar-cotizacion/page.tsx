@@ -83,17 +83,57 @@ type Address = {
   area: string;
 };
 
-type SavedAddress = Address & { id: string; label: string };
+type SavedAddress = {
+  id: number;
+  kind: "origin" | "destination";
+  label: string;
+  client_name: string;
+  client_phone: string;
+  contact_name: string;
+  contact_phone: string;
+  contact_email: string;
+  company_name: string;
+  country: string;
+  postal_code: string;
+  state: string;
+  city: string;
+  area: string;
+  street: string;
+  exterior_number: string;
+  interior_number: string;
+  reference: string;
+  additional_info: string;
+};
+
+type SavedPackage = {
+  id: number;
+  label: string;
+  length_cm: number;
+  width_cm: number;
+  height_cm: number;
+  weight_kg: string;
+  contents_description: string;
+  consignment_note: string;
+  packaging_type: string;
+};
 
 type PackageItem = {
   id: string;
   templateId: string;
+  savedPackageId: number | null;
   length: string;
   width: string;
   height: string;
   weight: string;
   declaredValue: string;
   protectedPkg: boolean;
+
+  contentsDescription: string;
+  consignmentNote: string;
+  packagingType: string;
+
+  savePackage: boolean;
+  packageLabel: string;
 };
 
 type PackageTemplate = {
@@ -105,28 +145,35 @@ type PackageTemplate = {
   weight: string;
 };
 
-/* ───────────── Datos locales ───────────── */
+type AddressDetails = {
+  savedAddressId: number | null;
+  label: string;
 
-const SAVED_ADDRESSES: SavedAddress[] = [
-  {
-    id: "bodega-mty",
-    label: "Bodega Monterrey",
-    country: "MX",
-    zip: "64000",
-    state: "Nuevo León",
-    city: "Monterrey",
-    area: "Centro",
-  },
-  {
-    id: "oficina-gdl",
-    label: "Oficina Guadalajara",
-    country: "MX",
-    zip: "44100",
-    state: "Jalisco",
-    city: "Guadalajara",
-    area: "Americana",
-  },
-];
+  clientName: string;
+  clientPhone: string;
+
+  country: string;
+  postalCode: string;
+  state: string;
+  city: string;
+  area: string;
+
+  street: string;
+  exteriorNumber: string;
+  interiorNumber: string;
+  reference: string;
+  additionalInfo: string;
+
+  contactName: string;
+  contactPhone: string;
+  contactEmail: string;
+  companyName: string;
+
+  saveAddress: boolean;
+  updateAddress: boolean;
+};
+
+/* ───────────── Datos locales ───────────── */
 
 const PACKAGE_TEMPLATES: PackageTemplate[] = [
   { id: "caja_chica", name: "Caja de cartón chica", length: "30", width: "20", height: "15", weight: "2" },
@@ -179,6 +226,118 @@ function formatPrice(opt: QuoteOption) {
   return `$${n.toFixed(2)} MXN`;
 }
 
+function emptyAddressDetails(base: Address): AddressDetails {
+  return {
+    savedAddressId: null,
+    label: "",
+    clientName: "",
+    clientPhone: "",
+    country: base.country || "MX",
+    postalCode: base.zip || "",
+    state: base.state || "",
+    city: base.city || "",
+    area: base.area || "",
+    street: "",
+    exteriorNumber: "",
+    interiorNumber: "",
+    reference: "",
+    additionalInfo: "",
+    contactName: "",
+    contactPhone: "",
+    contactEmail: "",
+    companyName: "",
+    saveAddress: false,
+    updateAddress: false,
+  };
+}
+
+function mapSavedAddressToAddress(a: SavedAddress): Address {
+  return {
+    country: a.country || "MX",
+    zip: a.postal_code || "",
+    state: a.state || "",
+    city: a.city || "",
+    area: a.area || "",
+  };
+}
+
+function mapSavedAddressToDetails(a: SavedAddress): AddressDetails {
+  return {
+    savedAddressId: a.id,
+    label: a.label || "",
+    clientName: a.client_name || "",
+    clientPhone: a.client_phone || "",
+    country: a.country || "MX",
+    postalCode: a.postal_code || "",
+    state: a.state || "",
+    city: a.city || "",
+    area: a.area || "",
+    street: a.street || "",
+    exteriorNumber: a.exterior_number || "",
+    interiorNumber: a.interior_number || "",
+    reference: a.reference || "",
+    additionalInfo: a.additional_info || "",
+    contactName: a.contact_name || "",
+    contactPhone: a.contact_phone || "",
+    contactEmail: a.contact_email || "",
+    companyName: a.company_name || "",
+    saveAddress: false,
+    updateAddress: false,
+  };
+}
+
+function detailsToPayload(kind: "origin" | "destination", d: AddressDetails) {
+  return {
+    kind,
+    label: d.label,
+    client_name: d.clientName,
+    client_phone: d.clientPhone,
+    contact_name: d.contactName,
+    contact_phone: d.contactPhone,
+    contact_email: d.contactEmail,
+    company_name: d.companyName,
+    country: d.country.toUpperCase(),
+    postal_code: d.postalCode,
+    state: d.state,
+    city: d.city,
+    area: d.area,
+    street: d.street,
+    exterior_number: d.exteriorNumber,
+    interior_number: d.interiorNumber,
+    reference: d.reference,
+    additional_info: d.additionalInfo,
+  };
+}
+
+function validateAddressDetails(kindLabel: string, d: AddressDetails): string | null {
+  if (!d.postalCode || d.postalCode.trim().length < 4) return `${kindLabel}: el C.P. es obligatorio.`;
+  if (!d.state || d.state.trim().length < 2) return `${kindLabel}: el estado es obligatorio.`;
+  if (!d.city || d.city.trim().length < 2) return `${kindLabel}: la ciudad es obligatoria.`;
+  if (!d.area || d.area.trim().length < 2) return `${kindLabel}: la colonia/área es obligatoria.`;
+  if (!d.clientName.trim()) return `${kindLabel}: el nombre del cliente es obligatorio.`;
+  if (!d.clientPhone.trim()) return `${kindLabel}: el teléfono del cliente es obligatorio.`;
+  if (!d.street.trim()) return `${kindLabel}: la calle es obligatoria.`;
+  if (!d.exteriorNumber.trim()) return `${kindLabel}: el número exterior es obligatorio.`;
+  if (!d.contactName.trim()) return `${kindLabel}: el nombre completo de quien recibe es obligatorio.`;
+  if (!d.contactPhone.trim()) return `${kindLabel}: el teléfono de quien recibe es obligatorio.`;
+  if (!d.contactEmail.trim()) return `${kindLabel}: el correo de quien recibe es obligatorio.`;
+  if (d.country.trim().toUpperCase() !== "MX") return `${kindLabel}: solo se soporta MX por ahora.`;
+  return null;
+}
+
+function extractApiErrorMessage(raw: unknown, fallback: string) {
+  if (!raw || typeof raw !== "object") return fallback;
+  const data = raw as Record<string, unknown>;
+  if (typeof data.message === "string" && data.message.trim()) return data.message;
+  if (typeof data.detail === "string" && data.detail.trim()) return data.detail;
+
+  for (const [k, v] of Object.entries(data)) {
+    if (Array.isArray(v) && v.length > 0) return `${k}: ${String(v[0])}`;
+    if (typeof v === "string" && v.trim()) return `${k}: ${v}`;
+  }
+  return fallback;
+}
+
 /* ───────────── Página ───────────── */
 
 export default function QuotePage() {
@@ -189,17 +348,28 @@ export default function QuotePage() {
     return {
       id: `pkg-${idCounter.current}`,
       templateId: "",
+      savedPackageId: null,
       length: "",
       width: "",
       height: "",
       weight: "",
       declaredValue: "",
       protectedPkg: false,
+      contentsDescription: "",
+      consignmentNote: "",
+      packagingType: "",
+      savePackage: false,
+      packageLabel: "",
     };
   };
 
   const [origin, setOrigin] = useState<Address>(EMPTY_ADDRESS);
   const [destination, setDestination] = useState<Address>(EMPTY_ADDRESS);
+
+  const [savedOriginAddresses, setSavedOriginAddresses] = useState<SavedAddress[]>([]);
+  const [savedDestinationAddresses, setSavedDestinationAddresses] = useState<SavedAddress[]>([]);
+  const [savedPackages, setSavedPackages] = useState<SavedPackage[]>([]);
+
   const [originSavedId, setOriginSavedId] = useState("");
   const [destSavedId, setDestSavedId] = useState("");
 
@@ -219,6 +389,9 @@ export default function QuotePage() {
   const [creatingShipment, setCreatingShipment] = useState(false);
   const [shipmentError, setShipmentError] = useState("");
 
+  const [originDetails, setOriginDetails] = useState<AddressDetails>(emptyAddressDetails(EMPTY_ADDRESS));
+  const [destinationDetails, setDestinationDetails] = useState<AddressDetails>(emptyAddressDetails(EMPTY_ADDRESS));
+
   const totals = useMemo(() => {
     const real = packages.reduce((acc, p) => acc + Number(p.weight || 0), 0);
     const vol = packages.reduce((acc, p) => acc + volumetricOf(p), 0);
@@ -229,11 +402,91 @@ export default function QuotePage() {
   const isRouteValid = isAddressValid(origin) && isAddressValid(destination);
   const arePackagesValid = packages.length > 0 && packages.every(isPackageValid);
   const isValid = isRouteValid && arePackagesValid;
+  const [shipmentSuccess, setShipmentSuccess] = useState("");
 
   const selectedOption = useMemo(
     () => [...quoteParcelOptions, ...quoteFreightOptions].find((o) => o.rate_id === selectedRateId) ?? null,
     [quoteParcelOptions, quoteFreightOptions, selectedRateId],
   );
+
+  useEffect(() => {
+    void loadSavedAddresses();
+    void loadSavedPackages();
+  }, []);
+
+  useEffect(() => {
+    setOriginDetails((prev) => ({
+      ...prev,
+      country: origin.country || "MX",
+      postalCode: origin.zip || "",
+      state: origin.state || "",
+      city: origin.city || "",
+      area: origin.area || "",
+    }));
+  }, [origin.country, origin.zip, origin.state, origin.city, origin.area]);
+
+  useEffect(() => {
+    setDestinationDetails((prev) => ({
+      ...prev,
+      country: destination.country || "MX",
+      postalCode: destination.zip || "",
+      state: destination.state || "",
+      city: destination.city || "",
+      area: destination.area || "",
+    }));
+  }, [destination.country, destination.zip, destination.state, destination.city, destination.area]);
+
+  async function loadSavedAddresses() {
+    try {
+      const [originRes, destRes] = await Promise.all([
+        fetch("/api/quotes/saved-addresses?kind=origin", { cache: "no-store" }),
+        fetch("/api/quotes/saved-addresses?kind=destination", { cache: "no-store" }),
+      ]);
+
+      const originJson = (await originRes.json().catch(() => null)) as { data?: SavedAddress[] } | null;
+      const destJson = (await destRes.json().catch(() => null)) as { data?: SavedAddress[] } | null;
+
+      if (originRes.ok) setSavedOriginAddresses(originJson?.data ?? []);
+      if (destRes.ok) setSavedDestinationAddresses(destJson?.data ?? []);
+    } catch {
+      // silencioso
+    }
+  }
+
+  async function loadSavedPackages() {
+    try {
+      const res = await fetch("/api/quotes/saved-packages", { cache: "no-store" });
+      const json = (await res.json().catch(() => null)) as { data?: SavedPackage[] } | null;
+      if (res.ok) setSavedPackages(json?.data ?? []);
+    } catch {
+      // silencioso
+    }
+  }
+
+  function resetAllAfterShipment() {
+    setOrigin(EMPTY_ADDRESS);
+    setDestination(EMPTY_ADDRESS);
+
+    setOriginSavedId("");
+    setDestSavedId("");
+
+    setOriginDetails(emptyAddressDetails(EMPTY_ADDRESS));
+    setDestinationDetails(emptyAddressDetails(EMPTY_ADDRESS));
+
+    idCounter.current = 0;
+    setPackages([newPackage()]);
+
+    setQuoteParcelOptions([]);
+    setQuoteFreightOptions([]);
+    setServerWeight(null);
+    setQuotationId(null);
+    setSelectedRateId(null);
+
+    setSuccess(false);
+    setError("");
+    setShipmentError("");
+    setSummaryOpen(false);
+}
 
   function addPackage() {
     setPackages((prev) => [...prev, newPackage()]);
@@ -257,13 +510,35 @@ export default function QuotePage() {
   }
 
   function applyTemplate(id: string, templateId: string) {
+    if (templateId.startsWith("saved-")) {
+      const saved = savedPackages.find((s) => `saved-${s.id}` === templateId);
+      if (saved) {
+        updatePackage(id, {
+          templateId,
+          savedPackageId: saved.id,
+          length: String(saved.length_cm),
+          width: String(saved.width_cm),
+          height: String(saved.height_cm),
+          weight: String(Number(saved.weight_kg)),
+          contentsDescription: saved.contents_description,
+          consignmentNote: saved.consignment_note,
+          packagingType: saved.packaging_type,
+          packageLabel: saved.label,
+          savePackage: false,
+        });
+        return;
+      }
+    }
+
     const tpl = PACKAGE_TEMPLATES.find((t) => t.id === templateId);
     if (!tpl) {
-      updatePackage(id, { templateId: "" });
+      updatePackage(id, { templateId: "", savedPackageId: null });
       return;
     }
+
     updatePackage(id, {
       templateId: tpl.id,
+      savedPackageId: null,
       length: tpl.length,
       width: tpl.width,
       height: tpl.height,
@@ -272,16 +547,34 @@ export default function QuotePage() {
   }
 
   function applySavedAddress(kind: "origin" | "destination", savedId: string) {
-    const saved = SAVED_ADDRESSES.find((a) => a.id === savedId);
-    const next: Address = saved
-      ? { country: saved.country, zip: saved.zip, state: saved.state, city: saved.city, area: saved.area }
-      : EMPTY_ADDRESS;
+    if (!savedId) {
+      if (kind === "origin") {
+        setOriginSavedId("");
+        setOrigin(EMPTY_ADDRESS);
+        setOriginDetails(emptyAddressDetails(EMPTY_ADDRESS));
+      } else {
+        setDestSavedId("");
+        setDestination(EMPTY_ADDRESS);
+        setDestinationDetails(emptyAddressDetails(EMPTY_ADDRESS));
+      }
+      return;
+    }
+
+    const source = kind === "origin" ? savedOriginAddresses : savedDestinationAddresses;
+    const found = source.find((a) => String(a.id) === savedId);
+    if (!found) return;
+
+    const base = mapSavedAddressToAddress(found);
+    const details = mapSavedAddressToDetails(found);
+
     if (kind === "origin") {
       setOriginSavedId(savedId);
-      if (saved) setOrigin(next);
+      setOrigin(base);
+      setOriginDetails(details);
     } else {
       setDestSavedId(savedId);
-      if (saved) setDestination(next);
+      setDestination(base);
+      setDestinationDetails(details);
     }
   }
 
@@ -335,14 +628,10 @@ export default function QuotePage() {
         body: JSON.stringify(payload),
       });
 
-      const json = (await res.json().catch(() => null)) as QuoteResponse | { message?: string; detail?: string } | null;
+      const json = (await res.json().catch(() => null)) as QuoteResponse | Record<string, unknown> | null;
 
       if (!res.ok) {
-        const msg =
-          (json && "message" in json && json.message) ||
-          (json && "detail" in json && json.detail) ||
-          "No se pudo procesar la cotización.";
-        throw new Error(msg);
+        throw new Error(extractApiErrorMessage(json, "No se pudo procesar la cotización."));
       }
 
       const data = (json as QuoteResponse).data;
@@ -358,36 +647,194 @@ export default function QuotePage() {
     }
   }
 
+  async function saveOrUpdateAddress(kind: "origin" | "destination", details: AddressDetails): Promise<number | null> {
+    if (details.updateAddress && details.savedAddressId) {
+      const patchRes = await fetch(`/api/quotes/saved-addresses/${details.savedAddressId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(detailsToPayload(kind, details)),
+      });
+      const patchJson = (await patchRes.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!patchRes.ok) throw new Error(extractApiErrorMessage(patchJson, "No se pudo actualizar la dirección."));
+      return Number((patchJson as { data?: SavedAddress })?.data?.id ?? details.savedAddressId);
+    }
+
+    if (details.saveAddress) {
+      const createRes = await fetch("/api/quotes/saved-addresses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(detailsToPayload(kind, details)),
+      });
+      const createJson = (await createRes.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!createRes.ok) throw new Error(extractApiErrorMessage(createJson, "No se pudo guardar la dirección."));
+      return Number((createJson as { data?: SavedAddress })?.data?.id ?? 0) || null;
+    }
+
+    return details.savedAddressId;
+  }
+
   async function handleCreateShipment() {
     if (!selectedOption || !quotationId) return;
     setCreatingShipment(true);
     setShipmentError("");
 
     try {
+      const originValidation = validateAddressDetails("Origen", originDetails);
+      if (originValidation) throw new Error(originValidation);
+
+      const destinationValidation = validateAddressDetails("Destino", destinationDetails);
+      if (destinationValidation) throw new Error(destinationValidation);
+
+      for (const [index, p] of packages.entries()) {
+        if (!p.contentsDescription.trim()) {
+          throw new Error(`Paquete ${index + 1}: la descripción del contenido es obligatoria.`);
+        }
+        if (p.savePackage && !p.packageLabel.trim()) {
+          throw new Error(`Paquete ${index + 1}: agrega nombre para guardarlo.`);
+        }
+      }
+
+      const [originAddressId, destinationAddressId] = await Promise.all([
+        saveOrUpdateAddress("origin", originDetails),
+        saveOrUpdateAddress("destination", destinationDetails),
+      ]);
+
+      setOriginDetails((prev) => ({
+        ...prev,
+        savedAddressId: originAddressId ?? prev.savedAddressId,
+        saveAddress: false,
+        updateAddress: false,
+      }));
+      setDestinationDetails((prev) => ({
+        ...prev,
+        savedAddressId: destinationAddressId ?? prev.savedAddressId,
+        saveAddress: false,
+        updateAddress: false,
+      }));
+
+      await loadSavedAddresses();
+
+      const newSavedPackageIds = new Map<string, number>();
+      for (const p of packages) {
+        if (!p.savePackage) continue;
+
+        const createPkgRes = await fetch("/api/quotes/saved-packages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            label: p.packageLabel.trim(),
+            length_cm: Number(p.length),
+            width_cm: Number(p.width),
+            height_cm: Number(p.height),
+            weight_kg: Number(p.weight),
+            contents_description: p.contentsDescription.trim(),
+            consignment_note: p.consignmentNote.trim(),
+            packaging_type: p.packagingType.trim(),
+          }),
+        });
+
+        const createPkgJson = (await createPkgRes.json().catch(() => null)) as Record<string, unknown> | null;
+        if (!createPkgRes.ok) {
+          throw new Error(extractApiErrorMessage(createPkgJson, "No se pudo guardar el paquete."));
+        }
+        const newId = Number((createPkgJson as { data?: SavedPackage })?.data?.id ?? 0);
+        if (newId) newSavedPackageIds.set(p.id, newId);
+      }
+
+      if (newSavedPackageIds.size > 0) {
+        setPackages((prev) =>
+          prev.map((p) => ({
+            ...p,
+            savedPackageId: newSavedPackageIds.get(p.id) ?? p.savedPackageId,
+            savePackage: false,
+          })),
+        );
+      }
+
+      await loadSavedPackages();
+
+      const parcels = packages.map((p) => ({
+        length: Number(p.length),
+        width: Number(p.width),
+        height: Number(p.height),
+        weight: Number(p.weight),
+        ...(p.declaredValue ? { declared_value: Number(p.declaredValue) } : {}),
+        ...(p.protectedPkg ? { package_protected: true } : {}),
+        contents_description: p.contentsDescription.trim(),
+        consignment_note: p.consignmentNote.trim(),
+        packaging_type: p.packagingType.trim(),
+        saved_package_id: newSavedPackageIds.get(p.id) ?? p.savedPackageId,
+      }));
+
       const payload = {
         quotation_id: quotationId,
         rate_id: selectedOption.rate_id,
-        origin,
-        destination,
-        parcels: packages.map((p) => ({
-          length: Number(p.length),
-          width: Number(p.width),
-          height: Number(p.height),
-          weight: Number(p.weight),
-          ...(p.declaredValue ? { declared_value: Number(p.declaredValue) } : {}),
-          ...(p.protectedPkg ? { package_protected: true } : {}),
-        })),
+        origin: {
+          country_code: originDetails.country.trim().toUpperCase(),
+          postal_code: originDetails.postalCode.trim(),
+          state: originDetails.state.trim(),
+          city: originDetails.city.trim(),
+          area: originDetails.area.trim(),
+          client_name: originDetails.clientName.trim(),
+          client_phone: originDetails.clientPhone.trim(),
+          street: originDetails.street.trim(),
+          exterior_number: originDetails.exteriorNumber.trim(),
+          interior_number: originDetails.interiorNumber.trim(),
+          reference: originDetails.reference.trim(),
+          additional_info: originDetails.additionalInfo.trim(),
+          contact_name: originDetails.contactName.trim(),
+          contact_phone: originDetails.contactPhone.trim(),
+          contact_email: originDetails.contactEmail.trim(),
+          company_name: originDetails.companyName.trim(),
+          saved_address_id: originAddressId,
+        },
+        destination: {
+          country_code: destinationDetails.country.trim().toUpperCase(),
+          postal_code: destinationDetails.postalCode.trim(),
+          state: destinationDetails.state.trim(),
+          city: destinationDetails.city.trim(),
+          area: destinationDetails.area.trim(),
+          client_name: destinationDetails.clientName.trim(),
+          client_phone: destinationDetails.clientPhone.trim(),
+          street: destinationDetails.street.trim(),
+          exterior_number: destinationDetails.exteriorNumber.trim(),
+          interior_number: destinationDetails.interiorNumber.trim(),
+          reference: destinationDetails.reference.trim(),
+          additional_info: destinationDetails.additionalInfo.trim(),
+          contact_name: destinationDetails.contactName.trim(),
+          contact_phone: destinationDetails.contactPhone.trim(),
+          contact_email: destinationDetails.contactEmail.trim(),
+          company_name: destinationDetails.companyName.trim(),
+          saved_address_id: destinationAddressId,
+        },
+        parcels,
       };
 
-      // TODO(Fase 2): conectar endpoint real para crear envío
-      // const res = await fetch("/api/shipments/skydropx", {
-      //   method: "POST",
-      //   headers: { "Content-Type": "application/json" },
-      //   body: JSON.stringify(payload),
-      // });
-      // if (!res.ok) throw new Error("No se pudo crear el envío.");
+      const res = await fetch("/api/quotes/shipments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
-      console.log("Payload crear envío (pendiente de endpoint):", payload);
+      const json = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+
+      if (!res.ok) {
+        throw new Error(extractApiErrorMessage(json, "No se pudo guardar el envío."));
+      }
+
+      const shipmentId = Number((json as { data?: { id?: number } })?.data?.id ?? 0);
+      setShipmentSuccess(
+        shipmentId ? `Envío #${shipmentId} guardado correctamente.` : "Envío guardado correctamente."
+      );
+
+      // Espera breve para que se vea feedback antes de limpiar todo
+      setTimeout(() => {
+        resetAllAfterShipment();
+        void loadSavedAddresses();
+        void loadSavedPackages();
+      }, 700);
+
+      setSummaryOpen(false);
     } catch (err) {
       setShipmentError(err instanceof Error ? err.message : "No se pudo crear el envío.");
     } finally {
@@ -399,7 +846,6 @@ export default function QuotePage() {
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900 dark:bg-[#030712] dark:text-white">
-      {/* Header */}
       <section className="relative overflow-hidden border-b border-slate-200 bg-white dark:border-white/10 dark:bg-[#0B1220]">
         <div className="pointer-events-none absolute inset-0 hidden dark:block dark:bg-[radial-gradient(circle_at_15%_20%,rgba(255,90,107,0.18),transparent_35%)]" />
         <div className="pointer-events-none absolute inset-0 hidden dark:block dark:bg-[radial-gradient(circle_at_85%_85%,rgba(124,143,184,0.16),transparent_42%)]" />
@@ -433,8 +879,8 @@ export default function QuotePage() {
           </div>
         </div>
       </section>
+      
 
-      {/* Qué evaluamos */}
       <div className="mx-auto max-w-[1600px] px-4 pt-6 sm:px-6 lg:px-8">
         <article className="rounded-2xl border border-slate-300 bg-white p-5 shadow-md dark:border-white/15 dark:bg-white/[0.06]">
           <h2 className="text-lg font-bold">¿Qué evaluamos por ti?</h2>
@@ -449,7 +895,6 @@ export default function QuotePage() {
         </article>
       </div>
 
-      {/* Barra sticky */}
       <div className="sticky top-0 z-30 mt-6 border-y border-slate-200 bg-white/90 backdrop-blur dark:border-white/10 dark:bg-[#0B1220]/90">
         <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2">
@@ -487,23 +932,26 @@ export default function QuotePage() {
         </div>
       </div>
 
-      {/* Formulario */}
       <div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">
         <form
           onSubmit={onSubmit}
           className="space-y-6 rounded-2xl border border-slate-300 bg-white p-5 shadow-md dark:border-white/15 dark:bg-white/[0.06] md:p-6"
         >
-          {/* Origen y Destino */}
           <div className="grid gap-6 lg:grid-cols-2">
             <AddressBlock
               title="Origen"
               tone="origin"
               value={origin}
+              savedOptions={savedOriginAddresses.map((a) => ({
+                label: a.label || `${a.city} · ${a.postal_code}`,
+                value: String(a.id),
+              }))}
+              savedId={originSavedId}
               onChange={(a) => {
                 setOrigin(a);
                 setOriginSavedId("");
+                setOriginDetails((prev) => ({ ...prev, savedAddressId: null, updateAddress: false }));
               }}
-              savedId={originSavedId}
               onSelectSaved={(id) => applySavedAddress("origin", id)}
             />
 
@@ -511,16 +959,20 @@ export default function QuotePage() {
               title="Destino"
               tone="destination"
               value={destination}
+              savedOptions={savedDestinationAddresses.map((a) => ({
+                label: a.label || `${a.city} · ${a.postal_code}`,
+                value: String(a.id),
+              }))}
+              savedId={destSavedId}
               onChange={(a) => {
                 setDestination(a);
                 setDestSavedId("");
+                setDestinationDetails((prev) => ({ ...prev, savedAddressId: null, updateAddress: false }));
               }}
-              savedId={destSavedId}
               onSelectSaved={(id) => applySavedAddress("destination", id)}
             />
           </div>
 
-          {/* Paquetes */}
           <div className="space-y-4 rounded-2xl border border-slate-300 bg-slate-50/70 p-4 dark:border-white/15 dark:bg-white/[0.04]">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-white/85">
@@ -549,9 +1001,7 @@ export default function QuotePage() {
                     <div>
                       <p className="text-sm font-semibold">Paquete {idx + 1}</p>
                       <p className="text-xs text-slate-500 dark:text-white/60">
-                        {pkgValid
-                          ? "Completo"
-                          : "Faltan datos de dimensiones o peso"}
+                        {pkgValid ? "Completo" : "Faltan datos de dimensiones o peso"}
                       </p>
                     </div>
 
@@ -585,6 +1035,7 @@ export default function QuotePage() {
                         options={[
                           { label: "Personalizado", value: "" },
                           ...PACKAGE_TEMPLATES.map((t) => ({ label: t.name, value: t.id })),
+                          ...savedPackages.map((s) => ({ label: `${s.label} (guardado)`, value: `saved-${s.id}` })),
                         ]}
                       />
                     </div>
@@ -594,28 +1045,36 @@ export default function QuotePage() {
                       type="number"
                       placeholder="Ej. 40"
                       value={pkg.length}
-                      onChange={(v) => updatePackage(pkg.id, { length: v, templateId: "" })}
+                      onChange={(v) =>
+                        updatePackage(pkg.id, { length: v, templateId: "", savedPackageId: null })
+                      }
                     />
                     <Input
                       label="Ancho (cm) *"
                       type="number"
                       placeholder="Ej. 30"
                       value={pkg.width}
-                      onChange={(v) => updatePackage(pkg.id, { width: v, templateId: "" })}
+                      onChange={(v) =>
+                        updatePackage(pkg.id, { width: v, templateId: "", savedPackageId: null })
+                      }
                     />
                     <Input
                       label="Alto (cm) *"
                       type="number"
                       placeholder="Ej. 20"
                       value={pkg.height}
-                      onChange={(v) => updatePackage(pkg.id, { height: v, templateId: "" })}
+                      onChange={(v) =>
+                        updatePackage(pkg.id, { height: v, templateId: "", savedPackageId: null })
+                      }
                     />
                     <Input
                       label="Peso (kg) *"
                       type="number"
                       placeholder="Ej. 8"
                       value={pkg.weight}
-                      onChange={(v) => updatePackage(pkg.id, { weight: v, templateId: "" })}
+                      onChange={(v) =>
+                        updatePackage(pkg.id, { weight: v, templateId: "", savedPackageId: null })
+                      }
                     />
 
                     <div className="md:col-span-2">
@@ -664,7 +1123,6 @@ export default function QuotePage() {
             </button>
           </div>
 
-          {/* Acción */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <button
               type="submit"
@@ -698,7 +1156,6 @@ export default function QuotePage() {
             </div>
           )}
 
-          {/* Resultados */}
           {hasResults && (
             <div className="space-y-4 rounded-2xl border border-slate-300 bg-slate-50 p-4 dark:border-white/15 dark:bg-white/[0.04]">
               <h4 className="flex items-center gap-2 text-base font-bold">
@@ -757,22 +1214,31 @@ export default function QuotePage() {
               )}
             </div>
           )}
+          
 
           <ShipmentSummaryModal
             open={summaryOpen && !!selectedOption}
             onClose={() => setSummaryOpen(false)}
-            origin={origin}
-            destination={destination}
-            packages={packages}
             option={selectedOption}
             totals={totals}
+            packages={packages}
+            setPackages={setPackages}
             quotationId={quotationId}
             creating={creatingShipment}
             error={shipmentError}
             onConfirm={handleCreateShipment}
+            origin={originDetails}
+            destination={destinationDetails}
+            setOrigin={setOriginDetails}
+            setDestination={setDestinationDetails}
           />
         </form>
+
       </div>
+      <FloatingSuccessToast
+        message={shipmentSuccess}
+        onClose={() => setShipmentSuccess("")}
+      />
     </main>
   );
 }
@@ -786,6 +1252,7 @@ function AddressBlock({
   onChange,
   savedId,
   onSelectSaved,
+  savedOptions,
 }: {
   title: string;
   tone: "origin" | "destination";
@@ -793,6 +1260,7 @@ function AddressBlock({
   onChange: (a: Address) => void;
   savedId: string;
   onSelectSaved: (id: string) => void;
+  savedOptions: Array<{ label: string; value: string }>;
 }) {
   const set = (patch: Partial<Address>) => onChange({ ...value, ...patch });
 
@@ -817,9 +1285,7 @@ function AddressBlock({
     <div className={`relative space-y-4 overflow-hidden rounded-2xl border p-5 pl-6 ${styles.card}`}>
       <span className={`absolute inset-y-0 left-0 w-1.5 ${styles.bar}`} aria-hidden />
       <div className="flex items-center gap-2.5">
-        <span
-          className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${styles.badge}`}
-        >
+        <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${styles.badge}`}>
           {styles.num}
         </span>
         <h3 className={`text-sm font-bold uppercase tracking-wide ${styles.title}`}>{title}</h3>
@@ -833,7 +1299,7 @@ function AddressBlock({
             onChange={onSelectSaved}
             options={[
               { label: "Capturar manualmente (C.P.)", value: "" },
-              ...SAVED_ADDRESSES.map((a) => ({ label: `${a.label} · ${a.zip}`, value: a.id })),
+              ...savedOptions,
             ]}
           />
         </div>
@@ -997,30 +1463,123 @@ function Select<T extends string>({
   );
 }
 
+function AddressDetailsForm({
+  title,
+  details,
+  setDetails,
+}: {
+  title: "Origen" | "Destino";
+  details: AddressDetails;
+  setDetails: (next: AddressDetails) => void;
+}) {
+  const set = (patch: Partial<AddressDetails>) => setDetails({ ...details, ...patch });
+
+  return (
+    <div className="space-y-4 rounded-xl border border-slate-300 bg-slate-50/70 p-4 dark:border-white/15 dark:bg-white/[0.04]">
+      <h4 className="text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-white/85">
+        {title}
+      </h4>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Input label="Etiqueta (opcional)" value={details.label} onChange={(v) => set({ label: v })} placeholder="Ej. Bodega Monterrey" />
+        <Input label="Empresa" value={details.companyName} onChange={(v) => set({ companyName: v })} placeholder="Ej. Global Pack Center" />
+
+        <Input label="Nombre cliente *" value={details.clientName} onChange={(v) => set({ clientName: v })} placeholder="Ej. Juan Pérez" />
+        <Input label="Teléfono cliente *" value={details.clientPhone} onChange={(v) => set({ clientPhone: v })} placeholder="Ej. 8123456789" />
+
+        <Input label="C.P. *" value={details.postalCode} onChange={(v) => set({ postalCode: v })} placeholder="Ej. 64000" />
+        <Input label="País (ISO) *" value={details.country} onChange={(v) => set({ country: v.toUpperCase() })} placeholder="MX" />
+
+        <Input label="Estado *" value={details.state} onChange={(v) => set({ state: v })} placeholder="Ej. Nuevo León" />
+        <Input label="Ciudad *" value={details.city} onChange={(v) => set({ city: v })} placeholder="Ej. Monterrey" />
+
+        <div className="md:col-span-2">
+          <Input label="Colonia / Área *" value={details.area} onChange={(v) => set({ area: v })} placeholder="Ej. Centro" />
+        </div>
+
+        <Input label="Calle *" value={details.street} onChange={(v) => set({ street: v })} placeholder="Ej. Av. Constitución" />
+        <Input label="Número exterior *" value={details.exteriorNumber} onChange={(v) => set({ exteriorNumber: v })} placeholder="Ej. 1204" />
+
+        <Input label="Número interior" value={details.interiorNumber} onChange={(v) => set({ interiorNumber: v })} placeholder="Ej. 3B" />
+        <Input label="Referencia" value={details.reference} onChange={(v) => set({ reference: v })} placeholder="Ej. Entre tienda y farmacia" />
+
+        <div className="md:col-span-2">
+          <Input
+            label="Información adicional"
+            value={details.additionalInfo}
+            onChange={(v) => set({ additionalInfo: v })}
+            placeholder="Ej. Casa blanca, reja negra"
+          />
+        </div>
+
+        <Input label="Nombre de quien envía *" value={details.contactName} onChange={(v) => set({ contactName: v })} placeholder="Ej. Ana López" />
+        <Input label="Teléfono de quien envía *" value={details.contactPhone} onChange={(v) => set({ contactPhone: v })} placeholder="Ej. 8112345678" />
+
+        <div className="md:col-span-2">
+          <Input label="Correo electrónico de quien envía *" value={details.contactEmail} onChange={(v) => set({ contactEmail: v })} placeholder="Ej. contacto@empresa.com" />
+        </div>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        <label className="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 dark:border-white/20 dark:bg-slate-900/50 dark:text-white/85">
+          <input
+            type="checkbox"
+            checked={details.saveAddress}
+            onChange={(e) => set({ saveAddress: e.target.checked })}
+            className="h-4 w-4 rounded border-slate-300 accent-[#C1374A]"
+          />
+          Guardar en mis direcciones
+        </label>
+
+        <label className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium ${
+          details.savedAddressId
+            ? "border-slate-300 bg-white text-slate-700 dark:border-white/20 dark:bg-slate-900/50 dark:text-white/85"
+            : "border-slate-200 bg-slate-100 text-slate-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/40"
+        }`}>
+          <input
+            type="checkbox"
+            checked={details.updateAddress}
+            disabled={!details.savedAddressId}
+            onChange={(e) => set({ updateAddress: e.target.checked })}
+            className="h-4 w-4 rounded border-slate-300 accent-[#C1374A]"
+          />
+          Actualizar la dirección
+        </label>
+      </div>
+    </div>
+  );
+}
+
 function ShipmentSummaryModal({
   open,
   onClose,
-  origin,
-  destination,
   packages,
+  setPackages,
   option,
   totals,
   quotationId,
   creating,
   error,
   onConfirm,
+  origin,
+  destination,
+  setOrigin,
+  setDestination,
 }: {
   open: boolean;
   onClose: () => void;
-  origin: Address;
-  destination: Address;
   packages: PackageItem[];
+  setPackages: React.Dispatch<React.SetStateAction<PackageItem[]>>;
   option: QuoteOption | null;
   totals: { real: number; vol: number; chargeable: number };
   quotationId: string | null;
   creating: boolean;
   error: string;
   onConfirm: () => void;
+  origin: AddressDetails;
+  destination: AddressDetails;
+  setOrigin: (next: AddressDetails) => void;
+  setDestination: (next: AddressDetails) => void;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -1045,7 +1604,7 @@ function ShipmentSummaryModal({
       aria-labelledby="summary-title"
     >
       <div
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-white/15 dark:bg-[#0B1220]"
+        className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-white/15 dark:bg-[#0B1220]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">
@@ -1053,9 +1612,7 @@ function ShipmentSummaryModal({
             <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-white/60">
               Resumen final
             </p>
-            <h2 id="summary-title" className="text-lg font-bold">
-              Confirma tu envío
-            </h2>
+            <h2 id="summary-title" className="text-lg font-bold">Confirma tu envío</h2>
           </div>
           <button
             type="button"
@@ -1068,39 +1625,81 @@ function ShipmentSummaryModal({
           </button>
         </div>
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <div className="rounded-xl border border-slate-200 p-3 dark:border-white/15">
-            <p className="text-xs font-semibold uppercase text-slate-500 dark:text-white/60">Origen</p>
-            <p className="mt-1 text-sm">
-              {origin.area}, {origin.city}, {origin.state}, C.P. {origin.zip}, {origin.country}
-            </p>
-          </div>
-          <div className="rounded-xl border border-slate-200 p-3 dark:border-white/15">
-            <p className="text-xs font-semibold uppercase text-slate-500 dark:text-white/60">Destino</p>
-            <p className="mt-1 text-sm">
-              {destination.area}, {destination.city}, {destination.state}, C.P. {destination.zip}, {destination.country}
-            </p>
-          </div>
+        <div className="mt-4 grid gap-4 xl:grid-cols-2">
+          <AddressDetailsForm title="Origen" details={origin} setDetails={setOrigin} />
+          <AddressDetailsForm title="Destino" details={destination} setDetails={setDestination} />
         </div>
 
-        <div className="mt-4 rounded-xl border border-slate-200 p-3 dark:border-white/15">
-          <p className="text-xs font-semibold uppercase text-slate-500 dark:text-white/60">
-            Paquetes ({packages.length})
-          </p>
-          <ul className="mt-2 divide-y divide-slate-100 text-sm dark:divide-white/10">
-            {packages.map((p, i) => (
-              <li key={p.id} className="flex flex-wrap justify-between gap-2 py-1.5">
-                <span>
-                  {i + 1}. {p.length} × {p.width} × {p.height} cm
-                </span>
-                <span className="text-slate-600 dark:text-white/70">
-                  {p.weight} kg
-                  {p.declaredValue ? ` · Valor $${p.declaredValue}` : ""}
-                  {p.protectedPkg ? " · Con seguro" : ""}
-                </span>
-              </li>
-            ))}
-          </ul>
+        <div className="mt-4 space-y-3 rounded-xl border border-slate-300 bg-slate-50/70 p-4 dark:border-white/15 dark:bg-white/[0.04]">
+          <h4 className="text-sm font-bold uppercase tracking-wide text-slate-700 dark:text-white/85">
+            Paquetes ({packages.length}) y contenido
+          </h4>
+
+          {packages.map((p, i) => {
+            const patch = (next: Partial<PackageItem>) =>
+              setPackages((prev) => prev.map((x) => (x.id === p.id ? { ...x, ...next } : x)));
+
+            return (
+              <article key={p.id} className="space-y-3 rounded-xl border border-slate-300 bg-white p-3 dark:border-white/15 dark:bg-white/[0.06]">
+                <div className="flex flex-wrap justify-between gap-2 text-sm">
+                  <span className="font-semibold">
+                    Paquete {i + 1}: {p.length} × {p.width} × {p.height} cm
+                  </span>
+                  <span className="text-slate-600 dark:text-white/70">
+                    {p.weight} kg
+                    {p.declaredValue ? ` · Valor $${p.declaredValue}` : ""}
+                    {p.protectedPkg ? " · Con seguro" : ""}
+                  </span>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="md:col-span-2">
+                    <Input
+                      label="Descripción del contenido *"
+                      value={p.contentsDescription}
+                      onChange={(v) => patch({ contentsDescription: v })}
+                      placeholder="Ej. Módulos de procesadores y cables para tablero de sistema"
+                    />
+                  </div>
+                  <Input
+                    label="Clave producto/servicio (Carta Porte)"
+                    value={p.consignmentNote}
+                    onChange={(v) => patch({ consignmentNote: v })}
+                    placeholder="Ej. 43211500"
+                  />
+                  <Input
+                    label="Tipo de embalaje (clave)"
+                    value={p.packagingType}
+                    onChange={(v) => patch({ packagingType: v })}
+                    placeholder="Ej. 1A"
+                  />
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <label className="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 dark:border-white/20 dark:bg-slate-900/50 dark:text-white/85">
+                    <input
+                      type="checkbox"
+                      checked={p.savePackage}
+                      onChange={(e) => patch({ savePackage: e.target.checked })}
+                      className="h-4 w-4 rounded border-slate-300 accent-[#C1374A]"
+                    />
+                    Guardar en mis paquetes
+                  </label>
+
+                  {p.savePackage ? (
+                    <Input
+                      label="Nombre del paquete guardado *"
+                      value={p.packageLabel}
+                      onChange={(v) => patch({ packageLabel: v })}
+                      placeholder="Ej. Módulos de procesadores"
+                    />
+                  ) : (
+                    <div />
+                  )}
+                </div>
+              </article>
+            );
+          })}
         </div>
 
         <div className="mt-4 grid grid-cols-3 gap-3 text-center">
@@ -1162,6 +1761,39 @@ function ShipmentSummaryModal({
             {creating ? "Creando envío..." : "Crear envío"}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function FloatingSuccessToast({
+  message,
+  onClose,
+}: {
+  message: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!message) return;
+    const t = setTimeout(onClose, 2600);
+    return () => clearTimeout(t);
+  }, [message, onClose]);
+
+  if (!message) return null;
+
+  return (
+    <div className="pointer-events-none fixed right-4 top-4 z-[70]">
+      <div className="pointer-events-auto flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 shadow-lg dark:border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-200">
+        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="pr-2">{message}</div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-md p-1 text-emerald-700 hover:bg-emerald-100 dark:text-emerald-200 dark:hover:bg-emerald-500/20"
+          aria-label="Cerrar notificación"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
     </div>
   );

@@ -18,11 +18,15 @@ from integrations.providers.skydropx.client import (
 )
 from integrations.providers.skydropx.mappers import map_quotation_rates
 
-from .models import Customer, QuoteParcel, QuoteRequest
+from .models import Customer, QuoteParcel, QuoteRequest, SavedAddress, SavedPackage, Shipment, ShipmentParcel
 from .serializers import (
     CustomerCreateSerializer,
     CustomerListSerializer,
     QuoteOutputSerializer,
+    SavedAddressSerializer,
+    SavedPackageSerializer,
+    ShipmentCreateSerializer,
+    ShipmentOutputSerializer,
     SkydropxQuoteInputSerializer,
 )
 from .services import parcels_weight_summary
@@ -188,4 +192,188 @@ class QuoteDetailView(QuotesBaseView):
                 "data": self._serialize(request, company_id, quote),
             },
             status=status.HTTP_200_OK,
+        )
+
+class SavedAddressListCreateView(QuotesBaseView):
+    def get(self, request):
+        company_id = self._company_id(request)
+        kind = request.query_params.get("kind")
+
+        qs = SavedAddress.objects.filter(company_id=company_id)
+        if kind in {"origin", "destination"}:
+            qs = qs.filter(kind=kind)
+
+        data = SavedAddressSerializer(qs[:200], many=True).data
+        return Response(
+            {"message": "Saved addresses retrieved successfully.", "data": data},
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request):
+        company_id = self._company_id(request)
+        serializer = SavedAddressSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        obj = serializer.save(company_id=company_id, created_by=request.user)
+        return Response(
+            {"message": "Saved address created successfully.", "data": SavedAddressSerializer(obj).data},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class SavedAddressDetailView(QuotesBaseView):
+    def patch(self, request, address_id: int):
+        company_id = self._company_id(request)
+        obj = get_object_or_404(SavedAddress, id=address_id, company_id=company_id)
+
+        serializer = SavedAddressSerializer(obj, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        return Response(
+            {"message": "Saved address updated successfully.", "data": SavedAddressSerializer(obj).data},
+            status=status.HTTP_200_OK,
+        )        
+
+class SavedPackageListCreateView(QuotesBaseView):
+    def get(self, request):
+        company_id = self._company_id(request)
+        qs = SavedPackage.objects.filter(company_id=company_id)[:200]
+        return Response(
+            {"message": "Saved packages retrieved successfully.",
+             "data": SavedPackageSerializer(qs, many=True).data},
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request):
+        company_id = self._company_id(request)
+        serializer = SavedPackageSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        obj = serializer.save(company_id=company_id, created_by=request.user)
+        return Response(
+            {"message": "Saved package created successfully.",
+             "data": SavedPackageSerializer(obj).data},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class ShipmentCreateView(QuotesBaseView):
+    def get(self, request):
+        company_id = self._company_id(request)
+        qs = (
+            Shipment.objects.filter(company_id=company_id)
+            .prefetch_related("parcels")
+            .order_by("-created_at")
+        )
+
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+
+        return Response(
+            {
+                "message": "Shipments retrieved successfully.",
+                "data": ShipmentOutputSerializer(
+                    qs[:200],
+                    many=True,
+                    context={"show_price": can_view_price(request.user, company_id)},
+                ).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request):
+        company_id = self._company_id(request)
+        serializer = ShipmentCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        quote = (
+            QuoteRequest.objects.filter(
+                company_id=company_id, provider_quotation_id=data["quotation_id"]
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        if not quote:
+            return Response(
+                {"message": "Cotización no encontrada.", "data": None},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        rate = next(
+            (o for o in (quote.result_options or []) if o.get("rate_id") == data["rate_id"]),
+            None,
+        )
+        if not rate:
+            return Response(
+                {"message": "La opción seleccionada no pertenece a la cotización.", "data": None},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        origin, dest = dict(data["origin"]), dict(data["destination"])
+        origin_addr_id = origin.pop("saved_address_id", None)
+        dest_addr_id = dest.pop("saved_address_id", None)
+
+        def valid_address_id(pk):
+            if not pk:
+                return None
+            return (
+                SavedAddress.objects.filter(id=pk, company_id=company_id)
+                .values_list("id", flat=True)
+                .first()
+            )
+
+        with transaction.atomic():
+            shipment = Shipment.objects.create(
+                company_id=company_id,
+                created_by=request.user,
+                quote=quote,
+                provider=quote.provider or "skydropx",
+                provider_quotation_id=data["quotation_id"],
+                rate_id=data["rate_id"],
+                carrier=rate.get("carrier", ""),
+                service=rate.get("service", ""),
+                estimated_days=rate.get("estimated_days"),
+                rate_snapshot=json.loads(json.dumps(rate, cls=DjangoJSONEncoder)),
+                origin=origin,
+                destination=dest,
+                origin_address_id=valid_address_id(origin_addr_id),
+                destination_address_id=valid_address_id(dest_addr_id),
+                weight_summary=parcels_weight_summary(data["parcels"]),
+                notes=data.get("notes", ""),
+            )
+
+            valid_pkg_ids = set(
+                SavedPackage.objects.filter(
+                    company_id=company_id,
+                    id__in=[p.get("saved_package_id") for p in data["parcels"] if p.get("saved_package_id")],
+                ).values_list("id", flat=True)
+            )
+
+            ShipmentParcel.objects.bulk_create(
+                ShipmentParcel(
+                    shipment=shipment,
+                    saved_package_id=p.get("saved_package_id") if p.get("saved_package_id") in valid_pkg_ids else None,
+                    length_cm=p["length"],
+                    width_cm=p["width"],
+                    height_cm=p["height"],
+                    weight_kg=p["weight"],
+                    declared_value=p.get("declared_value", 0),
+                    package_protected=p.get("package_protected", False),
+                    contents_description=p["contents_description"],
+                    consignment_note=p.get("consignment_note", ""),
+                    packaging_type=p.get("packaging_type", ""),
+                )
+                for p in data["parcels"]
+            )
+
+        return Response(
+            {
+                "message": "Shipment created successfully.",
+                "data": ShipmentOutputSerializer(
+                    shipment,
+                    context={"show_price": can_view_price(request.user, company_id)},
+                ).data,
+            },
+            status=status.HTTP_201_CREATED,
         )

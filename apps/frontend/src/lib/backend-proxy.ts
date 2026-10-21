@@ -11,19 +11,32 @@ async function refreshWithCookie(refreshToken: string) {
   });
 }
 
-async function authorizedFetch(method: "GET" | "POST", path: string, body?: unknown) {
+type HttpMethod = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
+
+async function authorizedFetch(method: HttpMethod, path: string, body?: unknown) {
   const c = await cookies();
   const access = c.get("access_token")?.value;
   const refresh = c.get("refresh_token")?.value;
-  const companyId = c.get("active_company_id")?.value;
+  const companyId = c.get("active_company_id")?.value ?? c.get("company_id")?.value;
 
   if (!access) {
-    return new Response(JSON.stringify({ detail: "Missing auth cookie" }), { status: 401 });
+    return new Response(JSON.stringify({ detail: "Missing auth cookie" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
-  const needsCompany = path.startsWith("/me/permissions") || path.startsWith("/modules/");
+  // Ajuste: quotes requiere company scope también
+  const needsCompany =
+    path.startsWith("/me/permissions") ||
+    path.startsWith("/modules/") ||
+    path.startsWith("/quotes/");
+
   if (needsCompany && !companyId) {
-    return new Response(JSON.stringify({ detail: "Missing company cookie" }), { status: 401 });
+    return new Response(JSON.stringify({ detail: "Missing company cookie" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   const doFetch = (token: string) =>
@@ -34,7 +47,7 @@ async function authorizedFetch(method: "GET" | "POST", path: string, body?: unkn
         ...(companyId ? { "X-Company-Id": companyId } : {}),
         "Content-Type": "application/json",
       },
-      body: method === "POST" ? JSON.stringify(body ?? {}) : undefined,
+      body: method === "GET" || method === "DELETE" ? undefined : JSON.stringify(body ?? {}),
       cache: "no-store",
     });
 
@@ -60,4 +73,17 @@ export async function backendGet(path: string) {
 
 export async function backendPost(path: string, body?: unknown) {
   return authorizedFetch("POST", path, body);
+}
+
+export async function backendPatch(path: string, body?: unknown) {
+  return authorizedFetch("PATCH", path, body);
+}
+
+// opcionales, por si luego los usas
+export async function backendPut(path: string, body?: unknown) {
+  return authorizedFetch("PUT", path, body);
+}
+
+export async function backendDelete(path: string) {
+  return authorizedFetch("DELETE", path);
 }

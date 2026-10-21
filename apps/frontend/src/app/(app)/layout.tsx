@@ -14,6 +14,8 @@ import {
   ClipboardList,
   ShieldCheck,
   LogOut,
+  PackageSearch,
+  CalendarClock,
 } from "lucide-react";
 
 import { apiFetch, ApiError } from "@/lib/apiFetch";
@@ -66,7 +68,8 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Cotizar y crear", href: "/solicitar-cotizacion", icon: Calculator, requiredPerms: ["quotes.create"] },
       { label: "Crear envío", href: "/envios/crear", icon: Truck, requiredPerms: ["quotes.create"] },
-      { label: "Link de pedido", href: "/pedidos/link", icon: Link2, requiredPerms: ["quotes.create"] },
+      { label: "Mis envíos", href: "/envios/mis-envios", icon: PackageSearch, requiredPerms: ["quotes.create"] },
+      { label: "Recolección", href: "/envios/recoleccion", icon: CalendarClock, requiredPerms: ["quotes.create"] },      
       { label: "Preparar órdenes", href: "/ordenes/preparar", icon: PackageCheck, requiredPerms: ["inventory.read"] },
       { label: "Inventario", href: "/inventory", icon: ClipboardList, requiredPerms: ["inventory.read"] },
     ],
