@@ -66,12 +66,11 @@ const NAV_SECTIONS: NavSection[] = [
   {
     title: "Operación",
     items: [
-      { label: "Cotizar y crear", href: "/solicitar-cotizacion", icon: Calculator, requiredPerms: ["quotes.create"] },
-      { label: "Crear envío", href: "/envios/crear", icon: Truck, requiredPerms: ["quotes.create"] },
+      { label: "Cotizar y crear - Nacional", href: "/solicitar-cotizacion", icon: Calculator, requiredPerms: ["quotes.create"] },
+      { label: "Cotizar y crear - Intl.", href: "/solicitar-cotizacion-int", icon: Truck, requiredPerms: ["quotes.create"] },
       { label: "Mis envíos", href: "/envios/mis-envios", icon: PackageSearch, requiredPerms: ["quotes.create"] },
-      { label: "Recolección", href: "/envios/recoleccion", icon: CalendarClock, requiredPerms: ["quotes.create"] },      
+      { label: "Recolecciones", href: "/envios/recoleccion", icon: CalendarClock, requiredPerms: ["quotes.create"] },      
       { label: "Preparar órdenes", href: "/ordenes/preparar", icon: PackageCheck, requiredPerms: ["inventory.read"] },
-      { label: "Inventario", href: "/inventory", icon: ClipboardList, requiredPerms: ["inventory.read"] },
     ],
   },
   {
@@ -80,6 +79,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Usuarios", href: "/users", icon: Users, requiredPerms: ["users.invite"] },
       { label: "Auditoría", href: "/audit", icon: ShieldCheck, requiredPerms: ["audit.read"] },
+      { label: "Facturación", href: "/facturacion", icon: ShieldCheck, requiredPerms: ["audit.read"] },
     ],
   },
   {

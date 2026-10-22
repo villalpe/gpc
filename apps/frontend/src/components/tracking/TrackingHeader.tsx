@@ -81,7 +81,7 @@ export default function TrackingHeader({
                 {title}
               </h1>
               {description && (
-                <p className="mt-0.5 text-sm text-slate-600 dark:text-white/70">{description} <strong>Sandbox Mode</strong></p>
+                <p className="mt-0.5 text-sm text-slate-600 dark:text-white/70">{description}</p>
               )}
             </div>
           </div>

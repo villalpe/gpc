@@ -7,6 +7,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.db.models import Q
 
 from accounts.permission_service import can_view_price
 from accounts.permissions import CanAccessQuotes
@@ -18,7 +19,7 @@ from integrations.providers.skydropx.client import (
 )
 from integrations.providers.skydropx.mappers import map_quotation_rates
 
-from .models import Customer, QuoteParcel, QuoteRequest, SavedAddress, SavedPackage, Shipment, ShipmentParcel
+from .models import Customer, QuoteParcel, QuoteRequest, SavedAddress, SavedPackage, Shipment, ShipmentParcel, SatClaveProdServ
 from .serializers import (
     CustomerCreateSerializer,
     CustomerListSerializer,
@@ -28,6 +29,7 @@ from .serializers import (
     ShipmentCreateSerializer,
     ShipmentOutputSerializer,
     SkydropxQuoteInputSerializer,
+    SatClaveProdServSerializer,
 )
 from .services import parcels_weight_summary
 
@@ -363,6 +365,7 @@ class ShipmentCreateView(QuotesBaseView):
                     contents_description=p["contents_description"],
                     consignment_note=p.get("consignment_note", ""),
                     packaging_type=p.get("packaging_type", ""),
+                    consignment_description=p.get("consignment_description", ""),
                 )
                 for p in data["parcels"]
             )
@@ -377,3 +380,32 @@ class ShipmentCreateView(QuotesBaseView):
             },
             status=status.HTTP_201_CREATED,
         )
+
+# Agrega esta vista (por ejemplo cerca de otros catálogos)
+class SatClaveProdServSearchView(QuotesBaseView):
+    def get(self, request):
+        q = (request.query_params.get("q") or "").strip()
+        limit_raw = request.query_params.get("limit", "20")
+
+        try:
+            limit = max(1, min(int(limit_raw), 50))
+        except ValueError:
+            limit = 20
+
+        qs = SatClaveProdServ.objects.filter(vigente=True)
+
+        if q:
+            qs = qs.filter(
+                Q(clave__icontains=q) |
+                Q(descripcion__icontains=q) |
+                Q(palabras_similares__icontains=q)
+            )
+
+        # Prioriza coincidencia por prefijo de clave
+        if q.isdigit():
+            qs = qs.order_by("clave")
+        else:
+            qs = qs.order_by("clave")
+
+        data = SatClaveProdServSerializer(qs[:limit], many=True).data
+        return Response({"data": data}, status=status.HTTP_200_OK)        

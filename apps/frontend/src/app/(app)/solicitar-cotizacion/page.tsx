@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import SatClaveProdServCombobox from "@/components/quotes/SatClaveProdServCombobox";
 
 /* ───────────── Tipos ───────────── */
 
@@ -134,6 +135,8 @@ type PackageItem = {
 
   savePackage: boolean;
   packageLabel: string;
+
+  consignmentDescription?: string;
 };
 
 type PackageTemplate = {
@@ -729,6 +732,7 @@ export default function QuotePage() {
             weight_kg: Number(p.weight),
             contents_description: p.contentsDescription.trim(),
             consignment_note: p.consignmentNote.trim(),
+            consignment_description: p.consignmentDescription || "",
             packaging_type: p.packagingType.trim(),
           }),
         });
@@ -762,6 +766,7 @@ export default function QuotePage() {
         ...(p.protectedPkg ? { package_protected: true } : {}),
         contents_description: p.contentsDescription.trim(),
         consignment_note: p.consignmentNote.trim(),
+        consignment_description: p.consignmentDescription || "",  
         packaging_type: p.packagingType.trim(),
         saved_package_id: newSavedPackageIds.get(p.id) ?? p.savedPackageId,
       }));
@@ -832,7 +837,7 @@ export default function QuotePage() {
         resetAllAfterShipment();
         void loadSavedAddresses();
         void loadSavedPackages();
-      }, 700);
+      }, 900);
 
       setSummaryOpen(false);
     } catch (err) {
@@ -853,8 +858,9 @@ export default function QuotePage() {
         <div className="relative mx-auto flex max-w-7xl flex-col gap-4 px-4 py-8 sm:px-6 lg:px-8 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#9F2436] dark:border-white/20 dark:bg-white/10 dark:text-white/80">
-              Cotización logística de carga
+              Cotización logística de paquetería y carga 
             </p>
+            
             <h1 className="mt-3 text-2xl font-extrabold md:text-3xl dark:bg-gradient-to-r dark:from-white dark:via-rose-100 dark:to-white dark:bg-clip-text dark:text-transparent">
               Compara opciones y elige la mejor para tu operación
             </h1>
@@ -888,49 +894,57 @@ export default function QuotePage() {
             <li className="flex gap-2"><Truck className="mt-0.5 h-4 w-4 shrink-0 text-[#C1374A]" />Tiempo de tránsito estimado</li>
             <li className="flex gap-2"><Scale className="mt-0.5 h-4 w-4 shrink-0 text-[#C1374A]" />Peso real vs volumétrico</li>
             <li className="flex gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#C1374A]" />Seguro y valor declarado</li>
-            <li className="flex gap-2"><Globe2 className="mt-0.5 h-4 w-4 shrink-0 text-[#C1374A]" />Cobertura nacional</li>
+            <li className="flex gap-2"><Globe2 className="mt-0.5 h-4 w-4 shrink-0 text-[#C1374A]" /><b>Cobertura Nacional</b></li>
             <li className="flex gap-2"><Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-[#C1374A]" />Urgencia operativa</li>
             <li className="flex gap-2"><Target className="mt-0.5 h-4 w-4 shrink-0 text-[#C1374A]" />Mejor relación costo-beneficio</li>
           </ul>
         </article>
       </div>
 
-      <div className="sticky top-0 z-30 mt-6 border-y border-slate-200 bg-white/90 backdrop-blur dark:border-white/10 dark:bg-[#0B1220]/90">
-        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-2">
-            <Package className="h-5 w-5 text-[#C1374A]" />
-            <span className="text-sm font-semibold">
-              {packages.length} {packages.length === 1 ? "paquete" : "paquetes"}
-            </span>
-          </div>
+<div className="sticky top-0 z-30 mt-6 border-y border-[#C1374A]/20 bg-gradient-to-r from-rose-50 via-white to-indigo-50 shadow-sm backdrop-blur dark:border-[#FF8FA1]/25 dark:from-[#2A0F14] dark:via-[#0B1220] dark:to-[#161D33]">
+  <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-6 lg:px-8">
+    <div className="inline-flex items-center gap-2 rounded-lg bg-white/80 px-2.5 py-1 ring-1 ring-[#C1374A]/15 dark:bg-white/10 dark:ring-white/10">
+      <Package className="h-5 w-5 text-[#C1374A] dark:text-[#FF9AAA]" />
+      <span className="text-sm font-semibold">
+        {packages.length} {packages.length === 1 ? "paquete" : "paquetes"}
+      </span>
+    </div>
 
-          <div className="flex items-baseline gap-2">
-            <span className="text-xs uppercase tracking-wide text-slate-500 dark:text-white/60">
-              Peso cobrable total
-            </span>
-            <span className="text-xl font-bold">{totals.chargeable.toFixed(2)} kg</span>
-          </div>
+    <div className="flex items-baseline gap-2">
+      <span className="text-xs uppercase tracking-wide text-slate-600 dark:text-white/60">
+        Peso cobrable total
+      </span>
+      <span className="text-xl font-extrabold text-[#9F2436] dark:text-[#FFB2BF]">
+        {totals.chargeable.toFixed(2)} kg
+      </span>
+    </div>
 
-          <div className="flex flex-wrap gap-x-4 text-xs text-slate-600 dark:text-white/70">
-            <span>Real: <strong>{totals.real.toFixed(2)} kg</strong></span>
-            <span>Volumétrico: <strong>{totals.vol.toFixed(2)} kg</strong></span>
-            {serverWeight && (
-              <span className="text-emerald-600 dark:text-emerald-300">
-                Confirmado por servidor: <strong>{serverWeight.chargeable_kg.toFixed(2)} kg</strong>
-              </span>
-            )}
-          </div>
+    <div className="flex flex-wrap gap-x-4 text-xs text-slate-700 dark:text-white/75">
+      <span>
+        Real: <strong>{totals.real.toFixed(2)} kg</strong>
+      </span>
+      <span>
+        Volumétrico: <strong>{totals.vol.toFixed(2)} kg</strong>
+      </span>
+      {serverWeight && (
+        <span className="text-emerald-700 dark:text-emerald-300">
+          Confirmado por servidor: <strong>{serverWeight.chargeable_kg.toFixed(2)} kg</strong>
+        </span>
+      )}
+    </div>
 
-          {selectedOption && (
-            <div className="ml-auto flex items-center gap-3 rounded-xl border border-[#C1374A]/40 bg-[#C1374A]/5 px-3 py-1.5">
-              <span className="text-xs text-slate-600 dark:text-white/70">
-                {selectedOption.carrier} · {selectedOption.service}
-              </span>
-              <span className="text-base font-bold text-[#C1374A]">{formatPrice(selectedOption)}</span>
-            </div>
-          )}
-        </div>
+    {selectedOption && (
+      <div className="ml-auto inline-flex items-center gap-3 rounded-xl border border-[#C1374A]/35 bg-gradient-to-r from-[#C1374A]/10 to-[#5B6F99]/10 px-3 py-1.5">
+        <span className="text-xs text-slate-700 dark:text-white/80">
+          {selectedOption.carrier} · {selectedOption.service}
+        </span>
+        <span className="text-base font-extrabold text-[#C1374A] dark:text-[#FF9AAA]">
+          {formatPrice(selectedOption)}
+        </span>
       </div>
+    )}
+  </div>
+</div>
 
       <div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">
         <form
@@ -1132,8 +1146,8 @@ export default function QuotePage() {
               <Search className="h-4 w-4" />
               {loading ? "Cotizando..." : "Cotizar envío"}
             </button>
-            <p className="text-xs text-slate-500 dark:text-white/60">
-              El precio de cada opción es el total de todos los paquetes.
+            <p className="text-xs text-slate-600 dark:text-white/60">
+              <b>Nota:</b> El precio de cada opción es el total de todos los paquetes.
             </p>
           </div>
 
@@ -1351,7 +1365,7 @@ function OptionList({
           return (
             <article
               key={opt.rate_id}
-              className={`flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between ${
+              className={`flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-stretch sm:justify-between ${
                 selected
                   ? "border-[#C1374A] bg-white ring-2 ring-[#C1374A]/20 dark:bg-white/[0.1]"
                   : highlightFirst && idx === 0
@@ -1359,38 +1373,65 @@ function OptionList({
                     : "border-slate-300 bg-white dark:border-white/15 dark:bg-white/[0.06]"
               }`}
             >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
                   {getCarrierLogo(opt.carrier) ? (
                     <Image
                       src={getCarrierLogo(opt.carrier)!}
                       alt={opt.carrier}
                       width={56}
                       height={24}
-                      className="h-6 w-auto object-contain"
+                      className="h-9 w-auto object-contain"
                     />
                   ) : null}
+
                   <p className="text-sm font-semibold">{opt.carrier}</p>
+
                   {highlightFirst && idx === 0 && (
                     <span className="rounded-full bg-[#C1374A]/10 px-2 py-0.5 text-[10px] font-semibold text-[#C1374A] dark:text-[#FF9AAA]">
                       Recomendada
                     </span>
                   )}
                 </div>
-                <p className="mt-0.5 text-xs text-slate-500 dark:text-white/60">{opt.service}</p>
-                <p className="mt-1 text-xs text-slate-500 dark:text-white/60">
-                  Entrega: {opt.delivery_type === "ocurre" ? "Sucursal (ocurre)" : "Domicilio"} · Recolección:{" "}
-                  {opt.pickup_available ? "Disponible" : "No disponible"}
-                </p>
+
+                {/* SERVICIO (resaltado principal) */}
+                <div className="mt-2">
+                  <span className="inline-flex items-center rounded-full border border-[#C1374A]/30 bg-[#C1374A]/10 px-3 py-1 text-xs font-bold tracking-wide text-[#9F2436] dark:text-[#FFB2BF]">
+                    {opt.service || "Servicio"}
+                  </span>
+                </div>
+
+                {/* Entrega / Recolección */}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 dark:bg-white/10 dark:text-white/80">
+                    Entrega: {opt.delivery_type === "ocurre" ? "Sucursal (ocurre)" : "Domicilio"}
+                  </span>
+                  <span
+                    className={`rounded-lg px-2.5 py-1 text-xs font-medium ${
+                      opt.pickup_available
+                        ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                        : "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300"
+                    }`}
+                  >
+                    Recolección: {opt.pickup_available ? "Disponible" : "No disponible"}
+                  </span>
+                </div>
               </div>
 
-              <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end sm:gap-1">
-                <p className="text-lg font-bold text-[#C1374A]">{formatPrice(opt)}</p>
-                <p className="text-xs text-slate-500 dark:text-white/60">{opt.estimated_days ?? "-"} día(s)</p>
+              {/* Columna derecha: ETA + precio + acción */}
+              <div className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 sm:w-[220px] dark:border-white/15 dark:bg-white/[0.06]">
+                <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-white/60">Entrega estimada</p>
+                <p className="mt-0.5 text-2xl font-extrabold leading-none text-[#C1374A]">
+                  {opt.estimated_days ?? "-"} <span className="text-sm font-semibold">día(s)</span>
+                </p>
+
+                <p className="mt-3 text-[11px] uppercase tracking-wide text-slate-500 dark:text-white/60">Tarifa</p>
+                <p className="mt-0.5 text-lg font-bold text-slate-900 dark:text-white">{formatPrice(opt)}</p>
+
                 <button
                   type="button"
                   onClick={() => onSelect(opt.rate_id)}
-                  className={`mt-1 h-8 rounded-lg px-3 text-xs font-semibold transition ${
+                  className={`mt-3 h-9 w-full rounded-lg px-3 text-xs font-semibold transition ${
                     selected
                       ? "bg-[#C1374A] text-white"
                       : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-white/20 dark:bg-white/10 dark:text-white"
@@ -1653,6 +1694,21 @@ function ShipmentSummaryModal({
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
+ 
+                  <SatClaveProdServCombobox
+                    value={p.consignmentNote}
+                    onSelect={(it) =>
+                      patch({
+                        consignmentNote: it.clave,
+                        consignmentDescription: it.descripcion,
+                      })
+                    }
+                  />
+                  {p.consignmentDescription ? (
+                    <p className="mt-1 text-xs text-slate-500 dark:text-white/60">
+                      {p.consignmentNote} — {p.consignmentDescription}
+                    </p>
+                  ) : null}
                   <div className="md:col-span-2">
                     <Input
                       label="Descripción del contenido *"
@@ -1661,12 +1717,6 @@ function ShipmentSummaryModal({
                       placeholder="Ej. Módulos de procesadores y cables para tablero de sistema"
                     />
                   </div>
-                  <Input
-                    label="Clave producto/servicio (Carta Porte)"
-                    value={p.consignmentNote}
-                    onChange={(v) => patch({ consignmentNote: v })}
-                    placeholder="Ej. 43211500"
-                  />
                   <Input
                     label="Tipo de embalaje (clave)"
                     value={p.packagingType}

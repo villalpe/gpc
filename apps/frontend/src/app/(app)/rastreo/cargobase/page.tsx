@@ -376,7 +376,7 @@ export default function RastreoCargobasePage() {
         description="Consulta el detalle de la solicitud y las quotes por CB number."
         inputLabel="CB number"
         placeholder="Ej. S136951885"
-        helperText="Formato: la letra S seguida de 9 dígitos. CB numeros de prueba: S136951885, S833950886"
+        helperText="Formato: la letra S seguida de 9 dígitos."
         buttonLabel="Buscar"
         inputId="cargobase-request"
         maxLength={10}

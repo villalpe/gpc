@@ -11,6 +11,7 @@ from .views import (
     SkydropxQuoteView,
     SavedPackageListCreateView,
     ShipmentCreateView,
+    SatClaveProdServSearchView,
 )
 
 urlpatterns = [
@@ -22,6 +23,8 @@ urlpatterns = [
 
     path("saved-addresses/", SavedAddressListCreateView.as_view(), name="saved-address-list-create"),
     path("saved-addresses/<int:address_id>/", SavedAddressDetailView.as_view(), name="saved-address-detail"),
+
+    path("sat/clave-prod-serv/", SatClaveProdServSearchView.as_view(), name="sat-clave-prod-serv-search"),
 
     path("saved-packages/", SavedPackageListCreateView.as_view(), name="saved-package-list-create"),
     path("shipments/", ShipmentCreateView.as_view(), name="shipment-create"),

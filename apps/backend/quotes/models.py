@@ -298,6 +298,26 @@ class ShipmentParcel(models.Model):
     contents_description = models.CharField(max_length=255)
     consignment_note = models.CharField(max_length=20, blank=True, default="")
     packaging_type = models.CharField(max_length=10, blank=True, default="")
+    consignment_description = models.TextField(blank=True, default="")
 
     class Meta:
-        ordering = ["id"]        
+        ordering = ["id"]   
+
+class SatClaveProdServ(models.Model):
+    clave = models.CharField(max_length=8, unique=True, db_index=True)
+    descripcion = models.TextField()
+    vigente = models.BooleanField(default=True)
+    fecha_inicio_vigencia = models.DateField(null=True, blank=True)
+    fecha_fin_vigencia = models.DateField(null=True, blank=True)
+    incluir_iva_trasladado = models.CharField(max_length=2, blank=True, default="")
+    incluir_ieps_trasladado = models.CharField(max_length=2, blank=True, default="")
+    complemento_que_debe_incluir = models.CharField(max_length=255, blank=True, default="")
+    estimulo_franja_fronteriza = models.CharField(max_length=2, blank=True, default="")
+    palabras_similares = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "sat_clave_prod_serv"
+        ordering = ["clave"]
+
+    def __str__(self):
+        return f"{self.clave} - {self.descripcion[:80]}"             

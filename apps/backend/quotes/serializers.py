@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Customer, QuoteRequest, SavedAddress, SavedPackage, Shipment
+from .models import Customer, QuoteRequest, SavedAddress, SavedPackage, Shipment, SatClaveProdServ
 
 PRICE_KEYS = ("price", "price_breakdown", "total_value_with_protection")
 
@@ -242,6 +242,46 @@ class ShipmentCreateSerializer(serializers.Serializer):
     notes = serializers.CharField(required=False, allow_blank=True)
 
 
+class ShipmentParcelInputSerializer(ParcelInputSerializer):
+    contents_description = serializers.CharField(max_length=255)
+    consignment_note = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    consignment_description = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    packaging_type = serializers.CharField(max_length=10, required=False, allow_blank=True)
+    saved_package_id = serializers.IntegerField(required=False, allow_null=True)
+
+    def validate(self, attrs):
+        clave = (attrs.get("consignment_note") or "").strip()
+
+        if clave:
+            if not clave.isdigit() or len(clave) != 8:
+                raise serializers.ValidationError(
+                    {"consignment_note": "La clave SAT debe tener 8 dígitos."}
+                )
+
+            sat = SatClaveProdServ.objects.filter(
+                clave=clave,
+                vigente=True
+            ).only("descripcion").first()
+
+            if not sat:
+                raise serializers.ValidationError(
+                    {"consignment_note": "Clave SAT no válida o no vigente."}
+                )
+
+            # Sobrescribe con descripción oficial
+            attrs["consignment_description"] = sat.descripcion
+
+        return attrs
+
+class ShipmentCreateSerializer(serializers.Serializer):
+    quotation_id = serializers.CharField(max_length=100)
+    rate_id = serializers.CharField(max_length=100)
+    origin = ShipmentAddressSerializer()
+    destination = ShipmentAddressSerializer()
+    parcels = ShipmentParcelInputSerializer(many=True, allow_empty=False)
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+
 class ShipmentOutputSerializer(serializers.ModelSerializer):
     parcels = serializers.SerializerMethodField()
     rate = serializers.SerializerMethodField()
@@ -251,17 +291,21 @@ class ShipmentOutputSerializer(serializers.ModelSerializer):
         fields = [
             "id", "status", "provider", "provider_quotation_id", "rate_id",
             "carrier", "service", "estimated_days", "origin", "destination",
-            "weight_summary", "parcels", "rate", "notes", "created_at",
+            "weight_summary", "parcels", "rate", "notes", "created_at"
         ]
 
     def get_parcels(self, obj):
         return [
             {
-                "length_cm": p.length_cm, "width_cm": p.width_cm, "height_cm": p.height_cm,
-                "weight_kg": p.weight_kg, "declared_value": p.declared_value,
+                "length_cm": p.length_cm,
+                "width_cm": p.width_cm,
+                "height_cm": p.height_cm,
+                "weight_kg": p.weight_kg,
+                "declared_value": p.declared_value,
                 "package_protected": p.package_protected,
                 "contents_description": p.contents_description,
                 "consignment_note": p.consignment_note,
+                "consignment_description": p.consignment_description,
                 "packaging_type": p.packaging_type,
             }
             for p in obj.parcels.all()
@@ -270,3 +314,8 @@ class ShipmentOutputSerializer(serializers.ModelSerializer):
     def get_rate(self, obj):
         rate = obj.rate_snapshot or {}
         return rate if self.context.get("show_price", False) else strip_price_fields(rate)             
+
+class SatClaveProdServSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SatClaveProdServ
+        fields = ("clave", "descripcion", "vigente")

@@ -1,10 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-const BASE = (process.env.CARGOBASE_BASE_URL ?? "https://sandbox.cargobase.com").replace(
-  /\/+$/,
-  ""
-);
+const BASE = (process.env.CARGOBASE_BASE_URL ?? "").replace(/\/+$/, "");
 const TOKEN = process.env.CARGOBASE_API_TOKEN;
 
 export async function GET(
@@ -17,9 +14,9 @@ export async function GET(
     return NextResponse.json({ detail: "No autenticado." }, { status: 401 });
   }
 
-  if (!TOKEN) {
+  if (!BASE || !TOKEN) {
     return NextResponse.json(
-      { detail: "CARGOBASE_API_TOKEN no configurado." },
+      { detail: "CARGOBASE_BASE_URL o CARGOBASE_API_TOKEN no configurados." },
       { status: 500 }
     );
   }

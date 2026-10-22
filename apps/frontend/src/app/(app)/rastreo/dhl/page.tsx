@@ -134,7 +134,7 @@ export default function RastreoDhlPage() {
         logoAlt="DHL"
         accentGradient="from-[#FFCC00] via-[#FFCC00] to-[#D40511]"
         title="Rastreo DHL"
-        description="Consulta el estatus y el historial de tu guía en tiempo real."
+        description="Consulta el estatus y el historial de tu guía en tiempo real. Sandbox Mode"
         inputLabel="Número de guía"
         placeholder="Ej. 1234567890"
         helperText="Ingresa el número de guía de DHL sin espacios ni guiones. Guias de prueba: 2670982436"
