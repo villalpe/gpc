@@ -250,6 +250,15 @@ class ShipmentParcelInputSerializer(ParcelInputSerializer):
     saved_package_id = serializers.IntegerField(required=False, allow_null=True)
 
     def validate(self, attrs):
+        # 1) Regla de seguro: si está protegido, valor declarado obligatorio y > 0
+        if attrs.get("package_protected"):
+            dv = attrs.get("declared_value")
+            if dv is None or float(dv) <= 0:
+                raise serializers.ValidationError({
+                    "declared_value": "Requerido cuando Protección (seguro) está activa y debe ser mayor a 0."
+                })
+
+        # 2) Validación de clave SAT + descripción oficial
         clave = (attrs.get("consignment_note") or "").strip()
 
         if clave:
@@ -258,17 +267,19 @@ class ShipmentParcelInputSerializer(ParcelInputSerializer):
                     {"consignment_note": "La clave SAT debe tener 8 dígitos."}
                 )
 
-            sat = SatClaveProdServ.objects.filter(
-                clave=clave,
-                vigente=True
-            ).only("descripcion").first()
+            sat = (
+                SatClaveProdServ.objects
+                .filter(clave=clave, vigente=True)
+                .only("descripcion")
+                .first()
+            )
 
             if not sat:
                 raise serializers.ValidationError(
                     {"consignment_note": "Clave SAT no válida o no vigente."}
                 )
 
-            # Sobrescribe con descripción oficial
+            # Sobrescribe con descripción oficial del catálogo
             attrs["consignment_description"] = sat.descripcion
 
         return attrs

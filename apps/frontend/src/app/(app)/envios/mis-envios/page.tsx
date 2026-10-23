@@ -2,7 +2,15 @@
 
 import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertCircle, ChevronDown, ChevronRight, PackageSearch, RefreshCw } from "lucide-react";
+import {
+  AlertCircle,
+  ChevronDown,
+  ChevronRight,
+  Download,
+  PackageSearch,
+  RefreshCw,
+  ShieldCheck,
+} from "lucide-react";
 
 type ShipmentAddress = {
   city?: string;
@@ -38,9 +46,12 @@ type Shipment = {
   destination: ShipmentAddress;
   weight_summary: { chargeable_kg?: number; real_kg?: number; volumetric_kg?: number };
   parcels: ShipmentParcel[];
-  rate: { price?: string };
+  rate: { price?: string | number };
+  price?: string | number | null;
+  total_price?: string | number | null;
   notes: string;
   created_at: string;
+  label_url?: string | null;
 };
 
 const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
@@ -69,9 +80,24 @@ function formatDate(iso: string) {
     : d.toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" });
 }
 
+function formatMXN(value: string | number) {
+  const n = Number(value);
+  return Number.isNaN(n)
+    ? "-"
+    : new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(n);
+}
+
 function formatPrice(s: Shipment) {
-  const n = Number(s.rate?.price);
-  return s.rate?.price && !Number.isNaN(n) ? `$${n.toFixed(2)} MXN` : "-";
+  const raw = s.rate?.price ?? s.price ?? s.total_price;
+  if (raw === undefined || raw === null || raw === "") return "-";
+  const n = Number(raw);
+  return Number.isNaN(n) ? "-" : `$${n.toFixed(2)} MXN`;
+}
+
+function insuredTotal(s: Shipment) {
+  return s.parcels
+    .filter((p) => p.package_protected)
+    .reduce((acc, p) => acc + (Number(p.declared_value) || 0), 0);
 }
 
 export default function MisEnviosPage() {
@@ -155,7 +181,7 @@ export default function MisEnviosPage() {
         )}
 
         <div className="overflow-x-auto rounded-2xl border border-slate-300 bg-white shadow-md dark:border-white/15 dark:bg-white/[0.06]">
-          <table className="w-full min-w-[900px] text-left text-sm">
+          <table className="w-full min-w-[1000px] text-left text-sm">
             <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/60">
               <tr>
                 <th className="w-8 px-3 py-3" />
@@ -168,12 +194,13 @@ export default function MisEnviosPage() {
                 <th className="px-3 py-3">Peso cobrable</th>
                 <th className="px-3 py-3">Precio</th>
                 <th className="px-3 py-3">Estatus</th>
+                <th className="px-3 py-3 text-center">Guía</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-white/10">
               {loading && shipments.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-8 text-center text-slate-500 dark:text-white/60">
+                  <td colSpan={11} className="px-3 py-8 text-center text-slate-500 dark:text-white/60">
                     Cargando envíos...
                   </td>
                 </tr>
@@ -181,7 +208,7 @@ export default function MisEnviosPage() {
 
               {!loading && shipments.length === 0 && !error && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-8 text-center text-slate-500 dark:text-white/60">
+                  <td colSpan={11} className="px-3 py-8 text-center text-slate-500 dark:text-white/60">
                     Aún no hay envíos.
                   </td>
                 </tr>
@@ -190,6 +217,7 @@ export default function MisEnviosPage() {
               {shipments.map((s) => {
                 const open = openId === s.id;
                 const st = STATUS_LABEL[s.status] ?? { text: s.status, cls: "bg-slate-100 text-slate-700" };
+                const hasInsurance = s.parcels.some((p) => p.package_protected);
                 return (
                   <Fragment key={s.id}>
                     <tr
@@ -224,25 +252,59 @@ export default function MisEnviosPage() {
                           ? `${Number(s.weight_summary.chargeable_kg).toFixed(2)} kg`
                           : "-"}
                       </td>
-                      <td className="px-3 py-3 whitespace-nowrap font-semibold text-[#C1374A]">
-                        {formatPrice(s)}
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <p className="font-semibold text-[#C1374A]">{formatPrice(s)}</p>
+                        {hasInsurance && (
+                          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-800 dark:bg-sky-500/15 dark:text-sky-200">
+                            <ShieldCheck className="h-3 w-3" />
+                            Asegurado {formatMXN(insuredTotal(s))}
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-3">
                         <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${st.cls}`}>
                           {st.text}
                         </span>
                       </td>
+                      <td className="px-3 py-3 text-center">
+                        {s.label_url ? (
+                          <a
+                            href={s.label_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            download
+                            onClick={(e) => e.stopPropagation()}
+                            title="Descargar guía"
+                            aria-label={`Descargar guía del envío ${s.id}`}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-[#C1374A] hover:bg-rose-50 dark:border-white/20 dark:bg-white/10 dark:text-[#FF9AAA] dark:hover:bg-white/15"
+                          >
+                            <Download className="h-4 w-4" />
+                          </a>
+                        ) : (
+                          <span
+                            title="La guía aún no está disponible"
+                            aria-label="Guía no disponible"
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex h-8 w-8 cursor-not-allowed items-center justify-center rounded-lg border border-slate-200 text-slate-300 dark:border-white/10 dark:text-white/25"
+                          >
+                            <Download className="h-4 w-4" />
+                          </span>
+                        )}
+                      </td>
                     </tr>
 
                     {open && (
                       <tr className="bg-slate-50/70 dark:bg-white/[0.03]">
                         <td />
-                        <td colSpan={9} className="space-y-3 px-3 py-4">
+                        <td colSpan={10} className="space-y-3 px-3 py-4">
                           <div className="grid gap-4 md:grid-cols-2">
                             {(["origin", "destination"] as const).map((k) => {
                               const a = s[k];
                               return (
-                                <div key={k} className="rounded-xl border border-slate-200 bg-white p-3 text-xs dark:border-white/15 dark:bg-white/[0.06]">
+                                <div
+                                  key={k}
+                                  className="rounded-xl border border-slate-200 bg-white p-3 text-xs dark:border-white/15 dark:bg-white/[0.06]"
+                                >
                                   <p className="mb-1 font-bold uppercase text-slate-500 dark:text-white/60">
                                     {k === "origin" ? "Origen" : "Destino"}
                                   </p>
@@ -272,10 +334,23 @@ export default function MisEnviosPage() {
                                     <strong>{i + 1}.</strong> {p.contents_description}
                                     {p.consignment_note ? ` · Carta Porte ${p.consignment_note}` : ""}
                                   </span>
-                                  <span className="text-slate-600 dark:text-white/70">
-                                    {p.length_cm}×{p.width_cm}×{p.height_cm} cm · {Number(p.weight_kg)} kg
-                                    {Number(p.declared_value) > 0 ? ` · Valor $${Number(p.declared_value)}` : ""}
-                                    {p.package_protected ? " · Con seguro" : ""}
+                                  <span className="flex flex-wrap items-center gap-2 text-slate-600 dark:text-white/70">
+                                    <span>
+                                      {p.length_cm}×{p.width_cm}×{p.height_cm} cm · {Number(p.weight_kg)} kg
+                                      {Number(p.declared_value) > 0
+                                        ? ` · Valor ${formatMXN(p.declared_value)}`
+                                        : ""}
+                                    </span>
+                                    {p.package_protected ? (
+                                      <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-800 dark:bg-sky-500/15 dark:text-sky-200">
+                                        <ShieldCheck className="h-3 w-3" />
+                                        Con seguro · {formatMXN(p.declared_value)}
+                                      </span>
+                                    ) : (
+                                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-white/10 dark:text-white/70">
+                                        Sin seguro
+                                      </span>
+                                    )}
                                   </span>
                                 </li>
                               ))}

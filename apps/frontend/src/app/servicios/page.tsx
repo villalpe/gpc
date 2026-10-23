@@ -106,11 +106,11 @@ export default function ServiciosPage() {
         <div className="relative mx-auto flex max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
           <div>
             <p className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#9F2436] dark:border-white/20 dark:bg-white/10 dark:text-white/80">
-              Servicios logísticos de carga
+              Servicios logísticos de paquetería y carga
             </p>
 
             <h1 className="mt-3 text-3xl font-extrabold tracking-tight md:text-4xl dark:bg-gradient-to-r dark:from-white dark:via-rose-100 dark:to-white dark:bg-clip-text dark:text-transparent">
-              Soluciones de carga y logística B2B
+              Soluciones de logística B2B
               <span className="block text-[#C1374A] dark:text-[#FF8FA1]">
                 para operar con velocidad, control y rentabilidad
               </span>
@@ -160,7 +160,7 @@ export default function ServiciosPage() {
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <Reveal y={14}>
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/15 dark:bg-white/[0.06]">
-            <h2 className="text-lg font-bold">¿Qué gana tu operación con GPC?</h2>
+            <h2 className="text-lg font-bold">¿Qué gana tu operación con Global Pack Center?</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {benefits.map((b) => (
                 <div

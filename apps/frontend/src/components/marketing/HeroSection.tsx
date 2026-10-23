@@ -147,7 +147,7 @@ export function HeroSection() {
             <div className="mt-3 rounded-2xl border border-white/15 bg-black/25 p-4 md:mt-4">
               <p className="text-xs uppercase tracking-wider text-white/70">Compromiso GPC</p>
               <p className="mt-2 text-sm text-white/90 md:text-base">
-                Creamos soluciones logísticas de carga a la medida, con seguimiento personalizado de punta a punta.
+                Creamos soluciones logísticas de paquetería y carga a la medida, con seguimiento personalizado de punta a punta.
               </p>
             </div>
           </div>

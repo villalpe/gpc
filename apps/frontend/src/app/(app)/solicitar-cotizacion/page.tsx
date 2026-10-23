@@ -229,6 +229,16 @@ function formatPrice(opt: QuoteOption) {
   return `$${n.toFixed(2)} MXN`;
 }
 
+function getPackageInsuranceError(pkg: PackageItem): string | null {
+  if (!pkg.protectedPkg) return null;
+
+  const dv = Number(pkg.declaredValue);
+  if (!pkg.declaredValue || Number.isNaN(dv) || dv <= 0) {
+    return "Si activas Protección (seguro), captura un Valor declarado mayor a 0.";
+  }
+  return null;
+}
+
 function emptyAddressDetails(base: Address): AddressDetails {
   return {
     savedAddressId: null,
@@ -598,6 +608,12 @@ export default function QuotePage() {
       return;
     }
 
+    const insuranceError = packages.map(getPackageInsuranceError).find(Boolean);
+    if (insuranceError) {
+      setError(insuranceError); // usa tu estado real de error global
+      return;
+    }
+
     setLoading(true);
     try {
       const payload = {
@@ -837,7 +853,7 @@ export default function QuotePage() {
         resetAllAfterShipment();
         void loadSavedAddresses();
         void loadSavedPackages();
-      }, 900);
+      }, 1200);
 
       setSummaryOpen(false);
     } catch (err) {
@@ -1090,17 +1106,36 @@ export default function QuotePage() {
                         updatePackage(pkg.id, { weight: v, templateId: "", savedPackageId: null })
                       }
                     />
-
                     <div className="md:col-span-2">
-                      <Input
-                        label="Valor declarado (MXN)"
+                      <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-white/85">
+                        Valor declarado (MXN)
+                      </label>
+                      <input
                         type="number"
+                        min="0"
+                        step="0.01"
                         placeholder="Ej. 2500"
                         value={pkg.declaredValue}
-                        onChange={(v) => updatePackage(pkg.id, { declaredValue: v })}
+                        onChange={(e) => updatePackage(pkg.id, { declaredValue: e.target.value })}
+                        className={`w-full rounded-xl border px-3 py-2 text-sm outline-none transition ${
+                          pkg.protectedPkg
+                            ? "border-[#C1374A]/50 bg-rose-50/40 focus:border-[#C1374A] focus:ring-4 focus:ring-[#C1374A]/15 dark:bg-rose-400/10"
+                            : "border-slate-300 bg-white focus:border-[#FF5A6B] focus:ring-4 focus:ring-[#FF5A6B]/15 dark:border-white/20 dark:bg-slate-900/50"
+                        }`}
                       />
-                    </div>
 
+                      {pkg.protectedPkg && (
+                        <p className="mt-1 text-[11px] text-slate-600 dark:text-white/70">
+                          Requerido para protección. Debe ser mayor a 0.
+                        </p>
+                      )}
+
+                      {getPackageInsuranceError(pkg) && (
+                        <p className="mt-1 text-xs font-medium text-rose-600 dark:text-rose-300">
+                          {getPackageInsuranceError(pkg)}
+                        </p>
+                      )}
+                    </div>
                     <label className="flex items-center gap-2 rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 md:col-span-2 md:mt-[30px] dark:border-white/20 dark:bg-slate-900/50 dark:text-white/85">
                       <input
                         type="checkbox"

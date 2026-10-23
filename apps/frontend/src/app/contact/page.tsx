@@ -223,7 +223,7 @@ export default function ContactPage() {
                       : "inline-flex rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#9F2436]"
                   }
                 >
-                  Hablemos de tu operación de carga
+                  Hablemos de tu operación de paquetería y carga
                 </p>
 
                 <h2

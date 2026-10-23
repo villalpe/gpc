@@ -2,9 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, CheckCircle2, AlertCircle, ArrowLeft } from "lucide-react";
+
+const REMEMBER_KEY = "gpc_remember_email";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -17,6 +19,19 @@ export default function LoginPage() {
   const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email), [email]);
   const passValid = useMemo(() => password.length >= 6, [password]);
   const canSubmit = emailValid && passValid && !loading;
+  const [remember, setRemember] = useState(false);
+
+   useEffect(() => {
+    try {
+      const saved = localStorage.getItem(REMEMBER_KEY);
+      if (saved) {
+        setEmail(saved);
+        setRemember(true);
+      }
+    } catch {
+      // localStorage no disponible
+    }
+  }, []);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -36,6 +51,14 @@ export default function LoginPage() {
       });
 
       if (!res.ok) throw new Error();
+
+      try {
+        if (remember) localStorage.setItem(REMEMBER_KEY, email.trim());
+        else localStorage.removeItem(REMEMBER_KEY);
+      } catch {
+        // ignorar errores de almacenamiento
+      }
+
       router.push("/dashboard");
     } catch {
       setError("Credenciales inválidas. Verifica tu correo y contraseña.");
@@ -44,7 +67,7 @@ export default function LoginPage() {
     }
   }
 
-  return (
+    return (
     <main className="relative min-h-screen overflow-hidden bg-[#020617] text-white">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(255,90,107,0.16),transparent_35%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_85%_85%,rgba(124,143,184,0.16),transparent_40%)]" />
@@ -185,7 +208,12 @@ export default function LoginPage() {
 
                 <div className="flex items-center justify-between pt-1">
                   <label className="inline-flex items-center gap-2 text-sm text-slate-600">
-                    <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-[#FF5A6B] focus:ring-[#FF5A6B]" />
+                    <input
+                        type="checkbox"
+                        checked={remember}
+                        onChange={(e) => setRemember(e.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300 text-[#FF5A6B] focus:ring-[#FF5A6B]"
+                      />
                     Recordarme
                   </label>
                   <Link href="/forgot-password" className="text-sm font-medium text-[#C1374A] hover:text-[#9F2436]">
