@@ -11,11 +11,11 @@ type CarrierLogo = {
 
 const carriers: CarrierLogo[] = [
   { name: "FedEx", src: "/images/fedexlogo.png", large: true },
-  { name: "DHL", src: "/images/dhl.png" },
-  { name: "UPS", src: "/images/ups.png" },
-  { name: "Estafeta", src: "/images/estafeta.png" },
-  { name: "Redpack", src: "/images/redpack.png" },
-  { name: "Paquete Express", src: "/images/paqueteexpress.png" },
+  { name: "DHL", src: "/images/DHL.png" },
+  { name: "UPS", src: "/images/UPS.png" },
+  { name: "Estafeta", src: "/images/Estafeta.png" },
+  { name: "Redpack", src: "/images/Redpack.png" },
+  { name: "Paquete Express", src: "/images/PaqueteExpress.png" },
 ];
 
 const marquee = [...carriers, ...carriers];

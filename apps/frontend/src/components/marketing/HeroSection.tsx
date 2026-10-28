@@ -7,9 +7,9 @@ import { ArrowRight, CheckCircle2 } from "lucide-react";
 
 // Agrega o quita rutas. Con [] solo se usan las imágenes.
 const heroVideos: string[] = [
-  "/images/video1.mp4",
-  "/images/video2.mp4",
-  "/images/video3.mp4",
+  "/images/Video1.mp4",
+  "/images/Video2.mp4",
+  "/images/Video3.mp4",
 ];
 
 const trustPoints = [
