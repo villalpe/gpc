@@ -39,68 +39,66 @@ const kpis = [
 
 export function ProcessSteps() {
   return (
-    <section className="relative isolate overflow-hidden bg-surface-2 py-20 text-white md:py-24">
-      {/* Capas sutiles de profundidad */}
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_15%_20%,rgba(255,77,99,0.14),transparent_38%)]" />
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(180deg,rgba(15,23,42,0.10)_0%,rgba(2,6,23,0.35)_100%)]" />
+    <section className="relative isolate overflow-hidden border-y border-slate-200/80 bg-slate-50 py-20 text-slate-900 md:py-24">
+      {/* Fondo uniforme en toda la sección */}
+      <div className="pointer-events-none absolute inset-0 -z-20 bg-[linear-gradient(180deg,#f8fafc_0%,#ffffff_100%)]" />
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_14%_12%,rgba(193,55,74,0.10),transparent_38%)]" />
 
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <Reveal y={18}>
+        <Reveal y={16}>
           <div className="mx-auto max-w-3xl text-center">
-            <p className="inline-flex items-center rounded-full border border-white/20 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-white/80">
+            <p className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
               Cómo operamos tu paquetería y carga
             </p>
 
-            <h2 className="mt-5 text-3xl font-extrabold tracking-tight md:text-4xl">
-              Un proceso logístico de paquetería y carga
-              <span className="block text-brand-red [text-shadow:0_2px_14px_rgba(255,77,99,0.30)]">
+            <h2 className="mt-5 text-3xl font-extrabold tracking-tight text-slate-900 md:text-4xl">
+              Un proceso logístico
+              <span className="block text-[var(--primary)]">
                 claro, medible y orientado a resultados
               </span>
             </h2>
 
-            <p className="mt-4 text-sm leading-relaxed text-white/75 md:text-base">
+            <p className="mt-4 text-sm leading-relaxed text-slate-600 md:text-base">
               Desde el diagnóstico hasta la optimización continua, estructuramos cada etapa para
               que tu operación gane control, puntualidad y rentabilidad.
             </p>
           </div>
         </Reveal>
 
-        {/* Mini KPIs */}
-        <Reveal y={16}>
+        <Reveal y={14}>
           <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {kpis.map((kpi) => (
               <div
                 key={kpi.label}
-                className="rounded-xl border border-white/15 bg-white/5 px-4 py-3 backdrop-blur-sm"
+                className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
               >
-                <p className="text-lg font-extrabold text-white md:text-xl">{kpi.value}</p>
-                <p className="mt-1 text-xs leading-snug text-white/70 md:text-sm">{kpi.label}</p>
+                <p className="text-lg font-extrabold text-[var(--primary)] md:text-xl">{kpi.value}</p>
+                <p className="mt-1 text-xs leading-snug text-slate-600 md:text-sm">{kpi.label}</p>
               </div>
             ))}
           </div>
         </Reveal>
 
-        {/* Steps */}
         <div className="mt-10 grid gap-5 md:mt-12 md:grid-cols-2 xl:grid-cols-4">
           {steps.map((step, i) => {
             const Icon = step.icon;
 
             return (
-              <Reveal key={step.title} delayMs={i * 90} y={20}>
-                <article className="group relative rounded-2xl border border-white/15 bg-white/5 p-5 backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:border-brand-red/40 hover:bg-white/10 hover:shadow-[0_12px_35px_rgba(255,77,99,0.12)] md:p-6">
-                  <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/15 bg-surface-1/70 text-brand-redSoft transition-colors duration-300 group-hover:bg-surface-1/90">
+              <Reveal key={step.title} delayMs={i * 90} y={18}>
+                <article className="group relative h-full rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[var(--primary)]/35 hover:shadow-lg md:p-6">
+                  <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--primary)]/20 bg-[var(--primary)]/5 text-[var(--primary)] transition-colors duration-300 group-hover:bg-[var(--primary)]/10">
                     <Icon className="h-5 w-5" />
                   </div>
 
-                  <h3 className="text-base font-bold leading-snug text-white md:text-lg">
+                  <h3 className="text-base font-bold leading-snug text-slate-900 md:text-lg">
                     {step.title}
                   </h3>
 
-                  <p className="mt-3 text-sm leading-relaxed text-white/75 md:text-[15px]">
+                  <p className="mt-3 text-sm leading-relaxed text-slate-600 md:text-[15px]">
                     {step.description}
                   </p>
 
-                  <div className="mt-5 h-[2px] w-14 rounded-full bg-gradient-to-r from-brand-redSoft to-transparent opacity-90" />
+                  <div className="mt-5 h-[2px] w-14 rounded-full bg-gradient-to-r from-[var(--primary)] to-transparent opacity-80" />
                 </article>
               </Reveal>
             );
