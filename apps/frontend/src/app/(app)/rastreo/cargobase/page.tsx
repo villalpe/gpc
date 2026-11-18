@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
-import { Download, ArrowRight, Send } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Download, Send } from "lucide-react";
 import TrackingHeader from "@/components/tracking/TrackingHeader";
 import { buildSheet, type Sheet } from "@/lib/cargobase/sheet";
 import { downloadSheetPdf } from "@/lib/cargobase/pdf";
@@ -31,9 +32,6 @@ const CARRIER_ACTIONS = [
 const card =
   "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/15 dark:bg-white/[0.06]";
 const muted = "text-xs text-slate-500 dark:text-white/60";
-const chip =
-  "rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-white/10 dark:text-white/80";
-
 function val(value: unknown): string {
   if (value === null || value === undefined || value === "") return "-";
   if (typeof value === "boolean") return value ? "Sí" : "No";
@@ -161,6 +159,7 @@ function httpError(status: number, fallback: string, what: string) {
 }
 
 export default function RastreoCargobasePage() {
+  const router = useRouter();
   const [requestId, setRequestId] = useState("");
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -286,7 +285,13 @@ export default function RastreoCargobasePage() {
   }
 
   function onCreateShipment(carrier: (typeof CARRIER_ACTIONS)[number]) {
-    // TODO: enviar `sheet` a la API de creación de envíos del carrier
+    if (carrier.id === "fedex") {
+      router.push(
+        `/rastreo/cargobase/${encodeURIComponent(requestId)}/fedex`
+      );
+      return;
+    }
+
     setNotice(`"${carrier.label}" estará disponible próximamente.`);
   }
 

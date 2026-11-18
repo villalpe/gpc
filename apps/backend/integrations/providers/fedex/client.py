@@ -43,3 +43,14 @@ class FedexClient:
         resp = requests.post(url, json=payload, headers=self._headers(), timeout=self.timeout)
         resp.raise_for_status()
         return resp.json()
+
+    def create_shipment(self, payload: dict) -> dict:
+        url = f"{self.base_url}/ship/v1/shipments"
+        resp = requests.post(
+            url,
+            json=payload,
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        return resp.json()

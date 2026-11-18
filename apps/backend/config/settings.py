@@ -131,10 +131,29 @@ CSRF_TRUSTED_ORIGINS = config(
     default="http://localhost:3000,http://127.0.0.1:3000",
 ).split(",")
 
-FEDEX_BASE_URL = config("FEDEX_BASE_URL", default="")
+FEDEX_BASE_URL = config(
+    "FEDEX_BASE_URL",
+    default="https://apis-sandbox.fedex.com",
+)
 FEDEX_API_KEY = config("FEDEX_API_KEY", default="")
 FEDEX_SECRET_KEY = config("FEDEX_SECRET_KEY", default="")
+FEDEX_ACCOUNT_NUMBER = config("FEDEX_ACCOUNT_NUMBER", default="")
 FEDEX_TIMEOUT_SECONDS = config("FEDEX_TIMEOUT_SECONDS", default=20, cast=int)
+FEDEX_SHIPMENT_CREATION_ENABLED = config(
+    "FEDEX_SHIPMENT_CREATION_ENABLED", default=False, cast=bool
+)
+
+EMAIL_BACKEND = config(
+    "EMAIL_BACKEND",
+    default="django.core.mail.backends.smtp.EmailBackend",
+)
+EMAIL_HOST = config("EMAIL_HOST", default="smtp.gmail.com")
+EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
+EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
+DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default=EMAIL_HOST_USER)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 32 * 1024 * 1024
 
 SKYDROPX_BASE_URL = config("SKYDROPX_BASE_URL", default="")
 SKYDROPX_API_KEY = config("SKYDROPX_API_KEY", default="")
