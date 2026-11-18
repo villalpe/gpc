@@ -3,6 +3,7 @@ import {
   fedexDraftFromCargobase,
   isInternationalFedexDraft,
 } from "./fedex";
+import { fedexRoute, fedexServices } from "./fedex-services";
 
 describe("Cargobase to FedEx draft mapping", () => {
   it("maps parties, package measurements, customs data, and requester email", () => {
@@ -57,7 +58,8 @@ describe("Cargobase to FedEx draft mapping", () => {
           pickup_datetime: "2026-11-18T10:00:00Z",
         },
       },
-      "S123456789"
+      "S123456789",
+      new Date(2026, 10, 20, 0, 10)
     );
 
     expect(draft.sender.country_code).toBe("MX");
@@ -67,7 +69,24 @@ describe("Cargobase to FedEx draft mapping", () => {
     expect(draft.packages[0].customs_items).toHaveLength(2);
     expect(draft.packages[0].customs_items[1].hs_code).toBe("654321");
     expect(draft.recipient_email).toBe("requestor@example.com");
-    expect(draft.ship_date).toBe("2026-11-18");
+    expect(draft.ship_date).toBe("2026-11-20");
     expect(isInternationalFedexDraft(draft)).toBe(true);
+  });
+
+  it("uses only complete country codes to choose the reference list", () => {
+    expect(fedexRoute(" mx ", "MX")).toBe("domestic");
+    expect(fedexRoute("MX", "US")).toBe("international");
+    expect(fedexRoute("", "US")).toBe("unknown");
+    expect(fedexRoute("Mexico", "US")).toBe("unknown");
+    expect(fedexServices("unknown")).toEqual([]);
+    expect(fedexServices("domestic")).toHaveLength(14);
+    expect(fedexServices("international")).toHaveLength(19);
+    for (const route of ["domestic", "international"] as const) {
+      expect(fedexServices(route).filter((service) => /freight/i.test(service.label)).length)
+        .toBeGreaterThan(0);
+      expect(fedexServices(route).every(
+        (service) => !/freight/i.test(service.label) || !service.code
+      )).toBe(true);
+    }
   });
 });

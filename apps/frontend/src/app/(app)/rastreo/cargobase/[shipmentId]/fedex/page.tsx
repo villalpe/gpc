@@ -12,6 +12,7 @@ import {
   type FedexPackage,
   type FedexParty,
 } from "@/lib/cargobase/fedex";
+import { fedexRoute, fedexServices } from "@/lib/cargobase/fedex-services";
 
 type CreatedShipment = {
   tracking_number: string;
@@ -178,6 +179,9 @@ export default function FedexShipmentReviewPage() {
     () => (draft ? isInternationalFedexDraft(draft) : false),
     [draft]
   );
+  const route = draft
+    ? fedexRoute(draft.sender.country_code, draft.recipient.country_code)
+    : "unknown";
 
   useEffect(() => {
     let active = true;
@@ -216,7 +220,11 @@ export default function FedexShipmentReviewPage() {
   ) {
     setDraft((current) =>
       current
-        ? { ...current, [which]: { ...current[which], [key]: value } }
+        ? {
+            ...current,
+            [which]: { ...current[which], [key]: value },
+            service_type: key === "country_code" ? "" : current.service_type,
+          }
         : current
     );
   }
@@ -474,7 +482,28 @@ export default function FedexShipmentReviewPage() {
             <h2 className="mb-4 text-lg font-semibold">Configuración FedEx</h2>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field title="Fecha de envío" type="date" value={draft.ship_date} onChange={(value) => setDraft({ ...draft, ship_date: value })} required />
-              <Field title="Servicio FedEx (código confirmado por GPC)" value={draft.service_type} onChange={(value) => setDraft({ ...draft, service_type: value })} required placeholder="Selecciona según ruta y cotización" />
+              <label className={label}>
+                Servicio FedEx
+                <select
+                  className={input}
+                  value={draft.service_type}
+                  onChange={(event) => setDraft({ ...draft, service_type: event.target.value })}
+                  disabled={route === "unknown"}
+                  required
+                >
+                  <option value="">
+                    {route === "unknown" ? "Completa los países de origen y destino" : "Selecciona un servicio..."}
+                  </option>
+                  {fedexServices(route).map((service) => (
+                    <option key={service.label} value={service.code ?? service.label} disabled={!service.code}>
+                      {service.label}{service.reason ? ` — ${service.reason}` : ""}
+                    </option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-white/60">
+                  Opciones de referencia, no una consulta de disponibilidad. FedEx debe confirmar el servicio para la ruta, paquete y cuenta.
+                </span>
+              </label>
               <SelectField title="Entrega o recolección" value={draft.pickup_type} onChange={(value) => setDraft({ ...draft, pickup_type: value })} required options={["DROPOFF_AT_FEDEX_LOCATION", "CONTACT_FEDEX_TO_SCHEDULE", "USE_SCHEDULED_PICKUP"]} />
               <Field title="Tipo de empaque FedEx" value={draft.packaging_type} onChange={(value) => setDraft({ ...draft, packaging_type: value })} required placeholder="Ej. YOUR_PACKAGING, confirmado por GPC" />
               <SelectField title="Quién paga el transporte" value={draft.payment_type} onChange={(value) => setDraft({ ...draft, payment_type: value })} required options={["SENDER", "RECIPIENT", "THIRD_PARTY"]} />
