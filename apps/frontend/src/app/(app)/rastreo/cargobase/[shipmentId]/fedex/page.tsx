@@ -13,6 +13,7 @@ import {
   type FedexParty,
 } from "@/lib/cargobase/fedex";
 import { fedexRoute, fedexServices } from "@/lib/cargobase/fedex-services";
+import FedexRates from "@/components/tracking/FedexRates";
 
 type CreatedShipment = {
   tracking_number: string;
@@ -518,6 +519,15 @@ export default function FedexShipmentReviewPage() {
               )}
             </div>
           </section>
+
+          <FedexRates
+            draft={draft}
+            onSelect={(date, service) =>
+              setDraft((current) => current
+                ? { ...current, ship_date: date, service_type: service }
+                : current)
+            }
+          />
 
           <PartyFields title="Remitente (Cargobase)" party={draft.sender} onChange={(key, value) => updateParty("sender", key, value)} />
           <PartyFields title="Destinatario (Cargobase)" party={draft.recipient} onChange={(key, value) => updateParty("recipient", key, value)} />

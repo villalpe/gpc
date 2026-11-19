@@ -7,6 +7,54 @@ class FedexTrackRequestSerializer(serializers.Serializer):
     tracking_number = serializers.CharField(max_length=50)
 
 
+class FedexRateAddressSerializer(serializers.Serializer):
+    country_code = serializers.RegexField(r"^[A-Za-z]{2}$")
+    postal_code = serializers.CharField(max_length=20)
+    city = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    state = serializers.CharField(max_length=3, required=False, allow_blank=True)
+
+
+class FedexRatePackageSerializer(serializers.Serializer):
+    quantity = serializers.IntegerField(min_value=1, max_value=40)
+    weight = serializers.DecimalField(
+        max_digits=10, decimal_places=3, min_value=Decimal("0.001")
+    )
+    weight_units = serializers.ChoiceField(choices=("KG", "LB"))
+    length = serializers.IntegerField(min_value=1, max_value=9999)
+    width = serializers.IntegerField(min_value=1, max_value=9999)
+    height = serializers.IntegerField(min_value=1, max_value=9999)
+    dimension_units = serializers.ChoiceField(choices=("CM", "IN"))
+
+
+class FedexRateSerializer(serializers.Serializer):
+    ship_date = serializers.DateField()
+    pickup_type = serializers.ChoiceField(
+        choices=(
+            "DROPOFF_AT_FEDEX_LOCATION",
+            "CONTACT_FEDEX_TO_SCHEDULE",
+            "USE_SCHEDULED_PICKUP",
+        )
+    )
+    packaging_type = serializers.CharField(max_length=60)
+    sender = FedexRateAddressSerializer()
+    recipient = FedexRateAddressSerializer()
+    packages = FedexRatePackageSerializer(many=True, allow_empty=False, max_length=40)
+
+    def validate(self, attrs):
+        origin = attrs["sender"]["country_code"].upper()
+        destination = attrs["recipient"]["country_code"].upper()
+        if origin == destination and origin != "US":
+            raise serializers.ValidationError(
+                {"detail": "FedEx doméstico solo aplica dentro de EE. UU. según la regla de GPC."}
+            )
+        return attrs
+
+    def validate_packages(self, packages):
+        if sum(package["quantity"] for package in packages) > 40:
+            raise serializers.ValidationError("El máximo es 40 paquetes por consulta.")
+        return packages
+
+
 class FedexPartySerializer(serializers.Serializer):
     company_name = serializers.CharField(max_length=100)
     person_name = serializers.CharField(max_length=100)

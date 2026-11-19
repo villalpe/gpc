@@ -1,6 +1,7 @@
 import base64
 import binascii
 import logging
+import re
 import smtplib
 
 import requests
@@ -11,21 +12,92 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.permission_service import can_view_price
+from accounts.permissions import CanAccessQuotes
+from core.company_context import get_active_company_id
+
 from .providers.fedex.client import FedexClient
 from .providers.fedex.mappers import (
     build_fedex_shipment_request,
     map_fedex_shipment,
     map_fedex_tracking,
 )
+from .providers.fedex.rates import build_rate_request, normalize_rate_response
 from .providers.skydropx.client import SkydropxClient
 from .providers.skydropx.mappers import map_skydropx_shipments_list
 from .serializers import (
     FedexCreateShipmentSerializer,
     FedexEmailShipmentSerializer,
+    FedexRateSerializer,
     FedexTrackRequestSerializer,
 )
 
 logger = logging.getLogger(__name__)
+
+
+class FedexRatesView(APIView):
+    permission_classes = [IsAuthenticated, CanAccessQuotes]
+
+    def post(self, request):
+        company_id = get_active_company_id(request)
+        if not can_view_price(request.user, company_id):
+            return Response(
+                {"detail": "No tienes permiso para consultar tarifas."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer = FedexRateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        if not all((
+            settings.FEDEX_ACCOUNT_NUMBER,
+            settings.FEDEX_API_KEY,
+            settings.FEDEX_SECRET_KEY,
+            settings.FEDEX_BASE_URL,
+        )):
+            return Response(
+                {"detail": "Faltan la cuenta o credenciales FedEx en el backend."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        if settings.FEDEX_BASE_URL.rstrip("/") != "https://apis-sandbox.fedex.com":
+            return Response(
+                {"detail": "La comparación de tarifas está disponible solo en sandbox."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        try:
+            payload = build_rate_request(serializer.validated_data, settings.FEDEX_ACCOUNT_NUMBER)
+            raw = FedexClient().rates(payload)
+            return Response({"rates": normalize_rate_response(raw)})
+        except requests.HTTPError as error:
+            upstream = error.response
+            codes = []
+            if upstream is not None:
+                try:
+                    errors = upstream.json().get("errors", [])
+                    codes = [
+                        entry.get("code") for entry in errors
+                        if isinstance(entry, dict)
+                        and isinstance(entry.get("code"), str)
+                        and re.fullmatch(r"[A-Za-z0-9._-]{1,100}", entry["code"])
+                    ]
+                except (ValueError, AttributeError, TypeError):
+                    logger.warning("Respuesta de error FedEx inválida.")
+            logger.warning("FedEx rechazó la consulta de tarifas (HTTP %s).",
+                           upstream.status_code if upstream is not None else "desconocido")
+            return Response(
+                {"detail": "FedEx rechazó la consulta de tarifas.", "codes": codes},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        except requests.Timeout:
+            logger.warning("La consulta de tarifas FedEx excedió el tiempo de espera.")
+            return Response(
+                {"detail": "FedEx tardó demasiado al consultar las tarifas."},
+                status=status.HTTP_504_GATEWAY_TIMEOUT,
+            )
+        except (requests.RequestException, ValueError, KeyError, TypeError):
+            logger.exception("No se pudo consultar o interpretar las tarifas FedEx.")
+            return Response(
+                {"detail": "No se pudo consultar o interpretar la respuesta de FedEx."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
 
 class FedexTrackView(APIView):

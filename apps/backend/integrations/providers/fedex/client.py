@@ -44,6 +44,16 @@ class FedexClient:
         resp.raise_for_status()
         return resp.json()
 
+    def rates(self, payload: dict) -> dict:
+        resp = requests.post(
+            f"{self.base_url}/rate/v1/rates/quotes",
+            json=payload,
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     def create_shipment(self, payload: dict) -> dict:
         url = f"{self.base_url}/ship/v1/shipments"
         resp = requests.post(

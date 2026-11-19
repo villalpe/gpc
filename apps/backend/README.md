@@ -15,6 +15,14 @@ Required backend variables:
 - `FEDEX_ACCOUNT_NUMBER`
 - `FEDEX_BASE_URL` (defaults to `https://apis-sandbox.fedex.com`)
 
+The review page can request sandbox account-rate estimates through FedEx Rates
+and Transit Times API independently of the shipment creation flag. Rate requests
+require an active company membership with permission to view prices. Compare
+up to five manually selected ship dates; each date is a separate API request.
+The quotes do not confirm service availability and do not necessarily include
+customs, insurance, special services, or future pickup charges. Package
+dimensions must be positive whole numbers, in the selected unit.
+
 Sending the label by email is a separate, user-confirmed action after shipment
 creation. Configure the backend SMTP sender with `EMAIL_HOST`, `EMAIL_PORT`,
 `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, and
