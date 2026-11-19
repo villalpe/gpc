@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { FedexDraft } from "@/lib/cargobase/fedex";
+import { rateValidationErrors } from "@/lib/cargobase/fedex-rate-errors";
 import { fedexRoute, fedexServices } from "@/lib/cargobase/fedex-services";
 
 type Rate = {
@@ -49,6 +50,13 @@ function validate(draft: FedexDraft, dates: string[]) {
   if (!draft.sender.postal_code.trim() || !draft.recipient.postal_code.trim()) {
     return "Indica los códigos postales de origen y destino.";
   }
+  const invalidStates = [
+    draft.sender.state.trim().length > 3 && "remitente",
+    draft.recipient.state.trim().length > 3 && "destinatario",
+  ].filter(Boolean);
+  if (invalidStates.length) {
+    return `Revisa el estado / provincia de ${invalidStates.join(" y ")}: usa el código correspondiente de hasta 3 caracteres, no el nombre completo.`;
+  }
   if (!draft.pickup_type || !draft.packaging_type.trim()) {
     return "Selecciona entrega o recolección e indica el tipo de empaque FedEx.";
   }
@@ -80,9 +88,10 @@ async function fetchRates(draft: FedexDraft, date: string): Promise<DateResult> 
     const data = await response.json();
     if (!response.ok) {
       const codes = Array.isArray(data.codes) ? data.codes.join(", ") : "";
+      const validationErrors = response.status === 400 ? rateValidationErrors(data) : [];
       return {
         date,
-        error: `${typeof data.detail === "string" ? data.detail : "Revisa los datos del envío."}${codes ? ` (${codes})` : ""}`,
+        error: `${validationErrors.join(" ") || (typeof data.detail === "string" ? data.detail : "Revisa los datos del envío.")}${codes ? ` (${codes})` : ""}`,
       };
     }
     if (!Array.isArray(data.rates)) {
