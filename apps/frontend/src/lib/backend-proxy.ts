@@ -31,7 +31,9 @@ async function authorizedFetch(method: HttpMethod, path: string, body?: unknown)
     path.startsWith("/me/permissions") ||
     path.startsWith("/modules/") ||
     path.startsWith("/quotes/") ||
-    path.startsWith("/integrations/fedex/rates/");
+    path.startsWith("/integrations/fedex/rates/") ||
+    path.startsWith("/integrations/fedex/addresses/") ||
+    path.startsWith("/integrations/fedex/preferences/");
 
   if (needsCompany && !companyId) {
     return new Response(JSON.stringify({ detail: "Missing company cookie" }), {

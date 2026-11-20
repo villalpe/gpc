@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Download, Mail, PackageCheck, Plus, Trash2 } from "lucide-react";
@@ -14,6 +14,8 @@ import {
 } from "@/lib/cargobase/fedex";
 import { fedexRoute, fedexServices } from "@/lib/cargobase/fedex-services";
 import FedexRates from "@/components/tracking/FedexRates";
+import FedexSavedAddresses from "@/components/tracking/FedexSavedAddresses";
+import FedexNotificationPreferences from "@/components/tracking/FedexNotificationPreferences";
 
 type CreatedShipment = {
   tracking_number: string;
@@ -98,10 +100,12 @@ function PartyFields({
   title,
   party,
   onChange,
+  onSelect,
 }: {
   title: string;
   party: FedexParty;
   onChange: (key: keyof FedexParty, value: string | string[]) => void;
+  onSelect: (party: FedexParty) => void;
 }) {
   const set = (key: keyof FedexParty) => (value: string) => onChange(key, value);
 
@@ -143,6 +147,7 @@ function PartyFields({
           placeholder="MX"
         />
       </div>
+      <FedexSavedAddresses party={party} onSelect={onSelect} />
     </section>
   );
 }
@@ -183,6 +188,9 @@ export default function FedexShipmentReviewPage() {
   const route = draft
     ? fedexRoute(draft.sender.country_code, draft.recipient.country_code)
     : "unknown";
+  const updateRequesterEmail = useCallback((email: string) => {
+    setDraft((current) => current ? { ...current, recipient_email: email } : current);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -314,7 +322,7 @@ export default function FedexShipmentReviewPage() {
                 length: "",
                 width: "",
                 height: "",
-                dimension_units: "",
+                dimension_units: "IN",
                 customs_items: [
                   {
                     description: "",
@@ -506,7 +514,10 @@ export default function FedexShipmentReviewPage() {
                 </span>
               </label>
               <SelectField title="Entrega o recolección" value={draft.pickup_type} onChange={(value) => setDraft({ ...draft, pickup_type: value })} required options={["DROPOFF_AT_FEDEX_LOCATION", "CONTACT_FEDEX_TO_SCHEDULE", "USE_SCHEDULED_PICKUP"]} />
-              <Field title="Tipo de empaque FedEx" value={draft.packaging_type} onChange={(value) => setDraft({ ...draft, packaging_type: value })} required placeholder="Ej. YOUR_PACKAGING, confirmado por GPC" />
+              <label className={label}>Tipo de empaque FedEx
+                <input className={input} value="YOUR_PACKAGING" readOnly />
+                <span className="mt-1 block text-xs font-normal text-slate-500">Solo para empaque propio.</span>
+              </label>
               <SelectField title="Quién paga el transporte" value={draft.payment_type} onChange={(value) => setDraft({ ...draft, payment_type: value })} required options={["SENDER", "RECIPIENT", "THIRD_PARTY"]} />
               {draft.payment_type !== "SENDER" && (
                 <Field title="Cuenta FedEx que paga el transporte" type="password" value={draft.payment_account_number} onChange={(value) => setDraft({ ...draft, payment_account_number: value })} required />
@@ -529,14 +540,15 @@ export default function FedexShipmentReviewPage() {
             }
           />
 
-          <PartyFields title="Remitente (Cargobase)" party={draft.sender} onChange={(key, value) => updateParty("sender", key, value)} />
-          <PartyFields title="Destinatario (Cargobase)" party={draft.recipient} onChange={(key, value) => updateParty("recipient", key, value)} />
+          <PartyFields title="Remitente (Cargobase)" party={draft.sender} onChange={(key, value) => updateParty("sender", key, value)} onSelect={(party) => setDraft({ ...draft, sender: party, service_type: "" })} />
+          <PartyFields title="Destinatario (Cargobase)" party={draft.recipient} onChange={(key, value) => updateParty("recipient", key, value)} onSelect={(party) => setDraft({ ...draft, recipient: party, service_type: "" })} />
 
           <section className={card}>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold">Paquetes y mercancías</h2>
                 <p className="text-sm text-slate-500 dark:text-white/60">Cada renglón representa unidades con las mismas medidas y peso.</p>
+                <p className="text-sm text-amber-700 dark:text-amber-300">Las medidas recibidas en centímetros se convierten a pulgadas enteras redondeadas; revisa las medidas antes de cotizar.</p>
               </div>
               <button type="button" onClick={addPackage} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold dark:border-white/20">
                 <Plus className="h-4 w-4" /> Agregar paquete
@@ -557,9 +569,9 @@ export default function FedexShipmentReviewPage() {
                     <Field title="Cantidad" type="number" step="1" value={item.quantity} onChange={(value) => updatePackage(index, "quantity", value)} required />
                     <Field title="Peso por unidad" type="number" step="0.001" value={item.weight} onChange={(value) => updatePackage(index, "weight", value)} required />
                     <SelectField title="Unidad de peso" value={item.weight_units} onChange={(value) => updatePackage(index, "weight_units", value)} required options={["KG", "LB"]} />
-                    <Field title="Largo" type="number" step="0.01" value={item.length} onChange={(value) => updatePackage(index, "length", value)} required />
-                    <Field title="Ancho" type="number" step="0.01" value={item.width} onChange={(value) => updatePackage(index, "width", value)} required />
-                    <Field title="Alto" type="number" step="0.01" value={item.height} onChange={(value) => updatePackage(index, "height", value)} required />
+                    <Field title="Largo" type="number" step="1" value={item.length} onChange={(value) => updatePackage(index, "length", value)} required />
+                    <Field title="Ancho" type="number" step="1" value={item.width} onChange={(value) => updatePackage(index, "width", value)} required />
+                    <Field title="Alto" type="number" step="1" value={item.height} onChange={(value) => updatePackage(index, "height", value)} required />
                     <SelectField title="Unidad de dimensiones" value={item.dimension_units} onChange={(value) => updatePackage(index, "dimension_units", value)} required options={["CM", "IN"]} />
                     {isInternational && (
                       <>
@@ -606,11 +618,13 @@ export default function FedexShipmentReviewPage() {
             </div>
           </section>
 
-          <section className={card}>
-            <h2 className="mb-2 text-lg font-semibold">Correo posterior a la creación</h2>
-            <p className="mb-4 text-sm text-slate-600 dark:text-white/70">El correo se enviará solo cuando GPC pulse el botón después de revisar la guía y descargar la etiqueta.</p>
-            <Field title="Correo del solicitante de Cargobase" type="email" value={draft.recipient_email} onChange={(value) => setDraft({ ...draft, recipient_email: value })} required />
-          </section>
+          <FedexNotificationPreferences
+            cbNumber={draft.cb_number}
+            senderEmail={draft.sender.email_address}
+            recipientEmail={draft.recipient.email_address}
+            requesterEmail={draft.recipient_email}
+            onRequesterEmailChange={updateRequesterEmail}
+          />
 
           <div className="flex justify-end">
             <button type="submit" disabled={creating} className="inline-flex items-center gap-2 rounded-xl bg-[#C1374A] px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">

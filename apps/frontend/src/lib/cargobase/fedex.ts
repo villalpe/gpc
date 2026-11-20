@@ -89,6 +89,16 @@ function party(root: unknown, point: "pickup" | "stop1"): FedexParty {
     schedule("address")
   );
 
+  const countryCode = string(
+    first(schedule("country_code"), address("country_code"), schedule("country"))
+  ).toUpperCase();
+  const rawState = string(
+    first(schedule("state_code"), schedule("state"), address("state_code"), address("state"))
+  );
+  const state = countryCode === "US" && /^US-[A-Z]{2}$/i.test(rawState)
+    ? rawState.slice(3).toUpperCase()
+    : rawState;
+
   return {
     company_name: company || contact,
     person_name: contact || company,
@@ -104,24 +114,11 @@ function party(root: unknown, point: "pickup" | "stop1"): FedexParty {
       .filter(Boolean)
       .slice(0, 3),
     city: string(first(schedule("city"), address("city"), address("city_name"))),
-    state: string(
-      first(
-        schedule("state_code"),
-        schedule("state"),
-        address("state_code"),
-        address("state")
-      )
-    ),
+    state,
     postal_code: string(
       first(schedule("zipcode"), schedule("postal_code"), address("zipcode"))
     ),
-    country_code: string(
-      first(
-        schedule("country_code"),
-        address("country_code"),
-        schedule("country")
-      )
-    ).toUpperCase(),
+    country_code: countryCode,
   };
 }
 
@@ -175,6 +172,17 @@ function packageFromItem(value: unknown): FedexPackage {
         ),
       ];
 
+  const dimensionsUnit = unit(item.m_unit, {
+    CM: "CM", CMS: "CM", CENTIMETER: "CM", CENTIMETERS: "CM",
+    IN: "IN", INCH: "IN", INCHES: "IN",
+  });
+  const dimension = (value: unknown) => {
+    const raw = string(value);
+    if (dimensionsUnit !== "CM" || !raw) return raw;
+    const number = Number(raw);
+    if (!Number.isFinite(number) || number <= 0) return raw;
+    return String(Math.max(1, Math.round(number / 2.54)));
+  };
   return {
     quantity: string(first(item.units, "1")),
     weight: string(item.weight),
@@ -188,18 +196,10 @@ function packageFromItem(value: unknown): FedexPackage {
       POUND: "LB",
       POUNDS: "LB",
     }),
-    length: string(item.length),
-    width: string(item.width),
-    height: string(item.height),
-    dimension_units: unit(item.m_unit, {
-      CM: "CM",
-      CMS: "CM",
-      CENTIMETER: "CM",
-      CENTIMETERS: "CM",
-      IN: "IN",
-      INCH: "IN",
-      INCHES: "IN",
-    }),
+    length: dimension(item.length),
+    width: dimension(item.width),
+    height: dimension(item.height),
+    dimension_units: dimensionsUnit === "CM" ? "IN" : dimensionsUnit,
     customs_items: customsItems,
   };
 }
@@ -222,7 +222,7 @@ export function fedexDraftFromCargobase(
     ship_date: `${year}-${month}-${day}`,
     service_type: "",
     pickup_type: "",
-    packaging_type: "",
+    packaging_type: "YOUR_PACKAGING",
     payment_type: "",
     payment_account_number: "",
     duties_payment_type: "",

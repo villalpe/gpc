@@ -12,6 +12,9 @@ type Rate = {
   currency: string | null;
   delivery_date: string | null;
   transit_time: string | null;
+  billing_weight: number | null;
+  billing_weight_units: string | null;
+  rated_weight_method: string | null;
 };
 
 type DateResult = { date: string; rates?: Rate[]; error?: string };
@@ -205,7 +208,7 @@ export default function FedexRates({
           ) : (
             <div className="mt-2 overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead><tr><th className="p-2">Servicio</th><th className="p-2">Tarifa de cuenta</th><th className="p-2">Entrega estimada</th><th className="p-2">Acción</th></tr></thead>
+                <thead><tr><th className="p-2">Servicio</th><th className="p-2">Tarifa de cuenta</th><th className="p-2">Peso cobrable estimado</th><th className="p-2">Entrega estimada</th><th className="p-2">Acción</th></tr></thead>
                 <tbody>
                   {result.rates.map((rate, index) => {
                     const selectable = services.some((service) => service.code === rate.service_type);
@@ -213,6 +216,11 @@ export default function FedexRates({
                       <tr key={`${rate.service_type}-${index}`} className="border-t border-slate-100 dark:border-white/10">
                         <td className="p-2">{rate.service_name}</td>
                         <td className="p-2">{typeof rate.amount === "number" && rate.currency ? `${rate.amount.toFixed(2)} ${rate.currency}` : "No proporcionada"}</td>
+                        <td className="p-2">
+                          {typeof rate.billing_weight === "number" && rate.billing_weight_units
+                            ? `${rate.billing_weight} ${rate.billing_weight_units}` : "No proporcionado"}
+                          {rate.rated_weight_method === "ACTUAL" ? " (real)" : rate.rated_weight_method === "DIM" || rate.rated_weight_method === "DIMENSIONAL" ? " (volumétrico)" : rate.rated_weight_method ? ` (${rate.rated_weight_method})` : ""}
+                        </td>
                         <td className="p-2">{rate.delivery_date || rate.transit_time || "No proporcionada"}</td>
                         <td className="p-2">
                           {selectable ? (

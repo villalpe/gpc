@@ -66,6 +66,15 @@ class FedexRateTests(SimpleTestCase):
         self.assertEqual(rate["currency"], "USD")
         self.assertEqual(rate["delivery_date"], "2026-11-20T17:00:00")
 
+    def test_billable_weight_uses_fedex_account_response(self):
+        account = self.raw["output"]["rateReplyDetails"][0]["ratedShipmentDetails"][1]
+        account["ratedWeightMethod"] = "DIM"
+        account["shipmentRateDetail"] = {"totalBillingWeight": {"value": 8, "units": "LB"}}
+        rate = normalize_rate_response(self.raw)[0]
+        self.assertEqual(rate["billing_weight"], 8)
+        self.assertEqual(rate["billing_weight_units"], "LB")
+        self.assertEqual(rate["rated_weight_method"], "DIM")
+
     def test_does_not_replace_missing_account_price_with_list_price(self):
         self.raw["output"]["rateReplyDetails"][0]["ratedShipmentDetails"].pop()
         self.assertIsNone(normalize_rate_response(self.raw)[0]["amount"])

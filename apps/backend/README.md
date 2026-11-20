@@ -22,6 +22,16 @@ up to five manually selected ship dates; each date is a separate API request.
 The quotes do not confirm service availability and do not necessarily include
 customs, insurance, special services, or future pickup charges. Package
 dimensions must be positive whole numbers, in the selected unit.
+The estimated billing weight and rating method are displayed only when supplied
+by FedEx. Cargobase dimensions in centimetres are converted to the nearest whole
+inch (minimum one inch); operators must verify the result. The fixed packaging
+type `YOUR_PACKAGING` is only appropriate for customer-provided packaging.
+
+Run `python manage.py migrate` to create the FedEx address and notification
+preference tables. Saved addresses are shared within the active company, and
+notification preferences are stored per company and CB. Both require an active
+company membership with price-view permission. Preferences do not enable or
+send FedEx notifications; label email remains a separate manual action.
 
 Sending the label by email is a separate, user-confirmed action after shipment
 creation. Configure the backend SMTP sender with `EMAIL_HOST`, `EMAIL_PORT`,

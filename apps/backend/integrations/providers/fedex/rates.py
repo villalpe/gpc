@@ -92,6 +92,19 @@ def normalize_rate_response(raw):
         )
         transit_time = commit.get("transitDays") or entry.get("transitTime")
         name = entry.get("serviceName")
+        billing = (
+            shipment_rate.get("totalBillingWeight") if isinstance(shipment_rate, dict) else None
+        )
+        billing = billing if isinstance(billing, dict) else {}
+        billing_value = billing.get("value")
+        if (
+            isinstance(billing_value, bool)
+            or not isinstance(billing_value, (int, float))
+            or not math.isfinite(billing_value)
+        ):
+            billing_value = None
+        billing_unit = billing.get("units")
+        method = account.get("ratedWeightMethod") if account else None
         rates.append({
             "service_type": entry["serviceType"],
             "service_name": name if isinstance(name, str) and name else entry["serviceType"],
@@ -99,5 +112,8 @@ def normalize_rate_response(raw):
             "currency": currency,
             "delivery_date": delivery_date if isinstance(delivery_date, str) else None,
             "transit_time": transit_time if isinstance(transit_time, str) else None,
+            "billing_weight": billing_value,
+            "billing_weight_units": billing_unit if isinstance(billing_unit, str) else None,
+            "rated_weight_method": method if isinstance(method, str) else None,
         })
     return rates

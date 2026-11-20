@@ -65,12 +65,42 @@ describe("Cargobase to FedEx draft mapping", () => {
     expect(draft.sender.country_code).toBe("MX");
     expect(draft.recipient.country_code).toBe("US");
     expect(draft.packages[0].weight_units).toBe("KG");
-    expect(draft.packages[0].dimension_units).toBe("CM");
+    expect(draft.packages[0].dimension_units).toBe("IN");
+    expect([draft.packages[0].length, draft.packages[0].width, draft.packages[0].height])
+      .toEqual(["8", "6", "4"]);
+    expect(draft.packaging_type).toBe("YOUR_PACKAGING");
     expect(draft.packages[0].customs_items).toHaveLength(2);
     expect(draft.packages[0].customs_items[1].hs_code).toBe("654321");
     expect(draft.recipient_email).toBe("requestor@example.com");
     expect(draft.ship_date).toBe("2026-11-20");
     expect(isInternationalFedexDraft(draft)).toBe(true);
+  });
+
+  it("normalizes US state prefixes without altering other states", () => {
+    const draft = fedexDraftFromCargobase({
+      schedule: {
+        pickup_country_code: "US", pickup_state_code: "US-OH",
+        stop1_country_code: "MX", stop1_state_code: "MX-AGU",
+      },
+    }, "S123456789");
+    expect(draft.sender.state).toBe("OH");
+    expect(draft.recipient.state).toBe("MX-AGU");
+  });
+
+  it("preserves inch and unknown measurements without inventing units", () => {
+    const draft = fedexDraftFromCargobase({
+      organization: { good_items: [
+        { length: 10, width: 5, height: 3, m_unit: "IN" },
+        { length: 12, width: 8, height: 2 },
+        { length: 0.1, width: "", height: 2.54, m_unit: "CM" },
+      ] },
+    }, "S123456789");
+    expect(draft.packages[0].length).toBe("10");
+    expect(draft.packages[0].dimension_units).toBe("IN");
+    expect(draft.packages[1].length).toBe("12");
+    expect(draft.packages[1].dimension_units).toBe("");
+    expect([draft.packages[2].length, draft.packages[2].width, draft.packages[2].height])
+      .toEqual(["1", "", "1"]);
   });
 
   it("uses only complete country codes to choose the reference list", () => {

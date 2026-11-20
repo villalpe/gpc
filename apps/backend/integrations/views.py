@@ -16,6 +16,7 @@ from accounts.permission_service import can_view_price
 from accounts.permissions import CanAccessQuotes
 from core.company_context import get_active_company_id
 
+from .models import FedexNotificationPreferences, FedexSavedAddress
 from .providers.fedex.client import FedexClient
 from .providers.fedex.mappers import (
     build_fedex_shipment_request,
@@ -28,11 +29,58 @@ from .providers.skydropx.mappers import map_skydropx_shipments_list
 from .serializers import (
     FedexCreateShipmentSerializer,
     FedexEmailShipmentSerializer,
+    FedexNotificationPreferencesSerializer,
     FedexRateSerializer,
+    FedexSavedAddressSerializer,
     FedexTrackRequestSerializer,
 )
 
 logger = logging.getLogger(__name__)
+
+
+class FedexCompanyDataView(APIView):
+    permission_classes = [IsAuthenticated, CanAccessQuotes]
+
+    def company_id(self, request):
+        company_id = get_active_company_id(request)
+        if not can_view_price(request.user, company_id):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("No tienes permiso para gestionar datos FedEx.")
+        return company_id
+
+
+class FedexSavedAddressesView(FedexCompanyDataView):
+    def get(self, request):
+        addresses = FedexSavedAddress.objects.filter(company_id=self.company_id(request))
+        return Response({"addresses": FedexSavedAddressSerializer(addresses, many=True).data})
+
+    def post(self, request):
+        company_id = self.company_id(request)
+        serializer = FedexSavedAddressSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        address = FedexSavedAddress.objects.create(
+            company_id=company_id, created_by=request.user, **serializer.validated_data
+        )
+        return Response(FedexSavedAddressSerializer(address).data, status=status.HTTP_201_CREATED)
+
+
+class FedexNotificationPreferencesView(FedexCompanyDataView):
+    def get(self, request, cb_number):
+        company_id = self.company_id(request)
+        obj = FedexNotificationPreferences.objects.filter(
+            company_id=company_id, cb_number=cb_number
+        ).first()
+        return Response({"preferences": obj.preferences if obj else None})
+
+    def put(self, request, cb_number):
+        company_id = self.company_id(request)
+        serializer = FedexNotificationPreferencesSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        obj, _ = FedexNotificationPreferences.objects.update_or_create(
+            company_id=company_id, cb_number=cb_number,
+            defaults={"preferences": serializer.validated_data},
+        )
+        return Response({"preferences": obj.preferences})
 
 
 class FedexRatesView(APIView):

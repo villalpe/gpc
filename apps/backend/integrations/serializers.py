@@ -71,6 +71,43 @@ class FedexPartySerializer(serializers.Serializer):
     country_code = serializers.RegexField(r"^[A-Za-z]{2}$")
 
 
+class FedexSavedAddressSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    label = serializers.CharField(max_length=120)
+    party = FedexPartySerializer()
+
+
+class FedexNotificationRecipientSerializer(serializers.Serializer):
+    email = serializers.EmailField(allow_blank=True)
+    created = serializers.BooleanField()
+    received = serializers.BooleanField()
+    delivery_estimate = serializers.BooleanField()
+    delivered = serializers.BooleanField()
+
+
+class FedexNotificationPreferencesSerializer(serializers.Serializer):
+    sender = FedexNotificationRecipientSerializer()
+    recipient = FedexNotificationRecipientSerializer()
+    other = FedexNotificationRecipientSerializer()
+    requester = FedexNotificationRecipientSerializer()
+
+    def validate_other(self, value):
+        if value["email"].lower() != "uslogistics@globalpackcenter.com":
+            raise serializers.ValidationError({"email": "El correo de Otro es fijo."})
+        value["email"] = "uslogistics@globalpackcenter.com"
+        return value
+
+    def validate(self, attrs):
+        for key, value in attrs.items():
+            if not value["email"] and any(
+                value[event] for event in ("created", "received", "delivery_estimate", "delivered")
+            ):
+                raise serializers.ValidationError(
+                    {key: {"email": "Indica un correo para los avisos."}}
+                )
+        return attrs
+
+
 class FedexCommoditySerializer(serializers.Serializer):
     description = serializers.CharField(max_length=450)
     hs_code = serializers.CharField(max_length=20)
