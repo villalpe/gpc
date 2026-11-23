@@ -3,6 +3,12 @@
 import { useState } from "react";
 import type { FedexDraft } from "@/lib/cargobase/fedex";
 import { rateValidationErrors } from "@/lib/cargobase/fedex-rate-errors";
+import {
+  formatRateAmount,
+  groupRatesByDelivery,
+  rateDelivery,
+  selectedRateSummary,
+} from "@/lib/cargobase/fedex-rate-presentation";
 import { fedexRoute, fedexServices } from "@/lib/cargobase/fedex-services";
 
 type Rate = {
@@ -18,6 +24,12 @@ type Rate = {
 };
 
 type DateResult = { date: string; rates?: Rate[]; error?: string };
+type SelectedRate = {
+  shipDate: string;
+  service: string;
+  rate: Rate;
+  quoteKey: string;
+};
 
 function requestData(draft: FedexDraft, shipDate: string) {
   const address = (party: FedexDraft["sender"]) => ({
@@ -118,9 +130,20 @@ export default function FedexRates({
   const [resultKey, setResultKey] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [selectedRate, setSelectedRate] = useState<SelectedRate | null>(null);
   const dates = [draft.ship_date, ...additionalDates];
-  const key = JSON.stringify(dates.map((date) => requestData(draft, date)));
+  const key = JSON.stringify(dates.map((date) => requestData(draft, date)).sort());
+  const quoteKey = JSON.stringify({
+    ...requestData(draft, draft.ship_date),
+    ship_date: undefined,
+  });
   const currentResults = resultKey === key ? results : null;
+  const currentSelection = selectedRate &&
+    selectedRate.quoteKey === quoteKey &&
+    selectedRate.shipDate === draft.ship_date &&
+    selectedRate.service === draft.service_type
+    ? selectedRate
+    : null;
   const services = fedexServices(fedexRoute(draft.sender.country_code, draft.recipient.country_code));
 
   async function compare() {
@@ -139,13 +162,33 @@ export default function FedexRates({
     setLoading(false);
   }
 
-  function selectRate(date: string, service: string) {
+  function selectRate(date: string, rate: Rate) {
+    setSelectedRate({
+      shipDate: date,
+      service: rate.service_type,
+      rate,
+      quoteKey,
+    });
     if (date !== draft.ship_date) {
       setAdditionalDates((current) =>
         current.map((item) => item === date ? draft.ship_date : item)
       );
     }
-    onSelect(date, service);
+    onSelect(date, rate.service_type);
+  }
+
+  function selectRateButton(result: DateResult, rate: Rate) {
+    const delivery = rateDelivery(rate.delivery_date);
+    return (
+      <button
+        type="button"
+        onClick={() => selectRate(result.date, rate)}
+        aria-label={`Seleccionar ${rate.service_name}${delivery.timeLabel ? `, entrega a las ${delivery.timeLabel}` : ""}`}
+        className="font-semibold text-[#C1374A]"
+      >
+        Seleccionar
+      </button>
+    );
   }
 
   return (
@@ -192,6 +235,11 @@ export default function FedexRates({
           {loading ? "Consultando FedEx..." : "Comparar tarifas y tiempos"}
         </button>
       </div>
+      {currentSelection && (
+        <p role="status" className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-200">
+          {selectedRateSummary(currentSelection.rate)}
+        </p>
+      )}
       {error && <p role="alert" className="mt-3 text-sm text-rose-700 dark:text-rose-300">{error}</p>}
       {results && !currentResults && (
         <p role="status" className="mt-3 text-sm text-amber-700 dark:text-amber-300">
@@ -207,32 +255,43 @@ export default function FedexRates({
             <p className="mt-2 text-sm text-slate-600 dark:text-white/70">FedEx no devolvió opciones para esta fecha.</p>
           ) : (
             <div className="mt-2 overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead><tr><th className="p-2">Servicio</th><th className="p-2">Tarifa de cuenta</th><th className="p-2">Peso cobrable estimado</th><th className="p-2">Entrega estimada</th><th className="p-2">Acción</th></tr></thead>
-                <tbody>
-                  {result.rates.map((rate, index) => {
-                    const selectable = services.some((service) => service.code === rate.service_type);
-                    return (
-                      <tr key={`${rate.service_type}-${index}`} className="border-t border-slate-100 dark:border-white/10">
-                        <td className="p-2">{rate.service_name}</td>
-                        <td className="p-2">{typeof rate.amount === "number" && rate.currency ? `${rate.amount.toFixed(2)} ${rate.currency}` : "No proporcionada"}</td>
-                        <td className="p-2">
-                          {typeof rate.billing_weight === "number" && rate.billing_weight_units
-                            ? `${rate.billing_weight} ${rate.billing_weight_units}` : "No proporcionado"}
-                          {rate.rated_weight_method === "ACTUAL" ? " (real)" : rate.rated_weight_method === "DIM" || rate.rated_weight_method === "DIMENSIONAL" ? " (volumétrico)" : rate.rated_weight_method ? ` (${rate.rated_weight_method})` : ""}
-                        </td>
-                        <td className="p-2">{rate.delivery_date || rate.transit_time || "No proporcionada"}</td>
-                        <td className="p-2">
-                          {selectable ? (
-                            <button type="button" onClick={() => selectRate(result.date, rate.service_type)}
-                              className="font-semibold text-[#C1374A]">Seleccionar</button>
-                          ) : <span className="text-xs text-slate-500">Servicio por confirmar</span>}
-                        </td>
+              {groupRatesByDelivery(result.rates).map((group) => (
+                <section key={`${result.date}-${group.key}`} className="mb-5">
+                  <h4 className="font-semibold">{group.label}</h4>
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr>
+                        <th className="p-2">Hora estimada</th>
+                        <th className="p-2">Servicio</th>
+                        <th className="p-2">Costo estimado</th>
+                        <th className="p-2">Peso cobrable</th>
+                        <th className="p-2">Acción</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody>
+                      {group.rates.map((rate, index) => {
+                        const selectable = services.some((service) => service.code === rate.service_type);
+                        const delivery = rateDelivery(rate.delivery_date);
+                        return (
+                          <tr key={`${rate.service_type}-${index}`} className="border-t border-slate-100 dark:border-white/10">
+                            <td className="p-2">{delivery.timeLabel ? `Hasta las ${delivery.timeLabel}` : rate.transit_time || "No proporcionada"}</td>
+                            <td className="p-2">{rate.service_name}</td>
+                            <td className="p-2">{formatRateAmount(rate.amount, rate.currency)}</td>
+                            <td className="p-2">
+                              {typeof rate.billing_weight === "number" && rate.billing_weight_units
+                                ? `${rate.billing_weight} ${rate.billing_weight_units}` : "No proporcionado"}
+                              {rate.rated_weight_method === "ACTUAL" ? " (real)" : rate.rated_weight_method === "DIM" || rate.rated_weight_method === "DIMENSIONAL" ? " (volumétrico)" : rate.rated_weight_method ? ` (${rate.rated_weight_method})` : ""}
+                            </td>
+                            <td className="p-2">
+                              {selectable ? selectRateButton(result, rate) : <span className="text-xs text-slate-500">Servicio por confirmar</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </section>
+              ))}
             </div>
           )}
         </div>
