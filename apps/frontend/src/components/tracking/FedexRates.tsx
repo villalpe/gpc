@@ -236,9 +236,43 @@ export default function FedexRates({
         </button>
       </div>
       {currentSelection && (
-        <p role="status" className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-200">
-          {selectedRateSummary(currentSelection.rate)}
-        </p>
+        <section
+          role="status"
+          aria-label={selectedRateSummary(currentSelection.rate)}
+          className="mt-4 rounded-xl border-2 border-emerald-600 bg-emerald-50 p-4 shadow-sm dark:border-emerald-400 dark:bg-emerald-500/10"
+        >
+          <p className="text-xs font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
+            Servicio seleccionado · estimación FedEx
+          </p>
+          <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-bold text-slate-950 dark:text-white">
+                {currentSelection.rate.service_name}
+              </h3>
+              {(() => {
+                const delivery = rateDelivery(currentSelection.rate.delivery_date);
+                return (
+                  <p className="mt-1 text-sm text-slate-700 dark:text-white/80">
+                    {delivery.dateLabel
+                      ? `${delivery.dateLabel}${delivery.timeLabel ? ` hasta las ${delivery.timeLabel}` : " · hora no proporcionada por FedEx"}`
+                      : "FedEx no proporcionó una fecha de entrega estimada para esta opción"}
+                  </p>
+                );
+              })()}
+            </div>
+            <p className="text-right">
+              <span className="block text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-white/70">
+                Costo estimado
+              </span>
+              <strong className="text-2xl font-bold tabular-nums text-emerald-900 dark:text-emerald-200">
+                {formatRateAmount(currentSelection.rate.amount, currentSelection.rate.currency)}
+              </strong>
+            </p>
+          </div>
+          <p className="mt-3 text-xs text-slate-600 dark:text-white/70">
+            Es una cotización de cuenta, no el cargo final. El importe definitivo se confirma al crear y facturar el envío.
+          </p>
+        </section>
       )}
       {error && <p role="alert" className="mt-3 text-sm text-rose-700 dark:text-rose-300">{error}</p>}
       {results && !currentResults && (
@@ -274,7 +308,15 @@ export default function FedexRates({
                         const delivery = rateDelivery(rate.delivery_date);
                         return (
                           <tr key={`${rate.service_type}-${index}`} className="border-t border-slate-100 dark:border-white/10">
-                            <td className="p-2">{delivery.timeLabel ? `Hasta las ${delivery.timeLabel}` : rate.transit_time || "No proporcionada"}</td>
+                            <td className="p-2">
+                              {delivery.timeLabel
+                                ? `Hasta las ${delivery.timeLabel}`
+                                : delivery.dateLabel
+                                  ? "Hora no proporcionada por FedEx"
+                                  : rate.transit_time
+                                    ? `Tránsito: ${rate.transit_time}; fecha/hora no proporcionada`
+                                    : "Fecha/hora no proporcionada"}
+                            </td>
                             <td className="p-2">{rate.service_name}</td>
                             <td className="p-2">{formatRateAmount(rate.amount, rate.currency)}</td>
                             <td className="p-2">

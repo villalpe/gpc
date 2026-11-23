@@ -63,8 +63,8 @@ export function selectedRateSummary(rate: {
   const delivery = rateDelivery(rate.delivery_date);
   const estimate = delivery.dateLabel
     ? `${delivery.dateLabel}${delivery.timeLabel ? ` hasta las ${delivery.timeLabel}` : ", hora de entrega por confirmar"}`
-    : "fecha y hora de entrega por confirmar";
-  return `Servicio seleccionado: ${rate.service_name} — ${estimate} — costo estimado: ${formatRateAmount(rate.amount, rate.currency)}`;
+    : "FedEx no proporcionó una fecha de entrega estimada para esta opción";
+  return `Servicio seleccionado: ${rate.service_name} — ${estimate} — costo estimado según la respuesta de FedEx: ${formatRateAmount(rate.amount, rate.currency)}`;
 }
 
 export function groupRatesByDelivery<T extends RateWithDelivery>(

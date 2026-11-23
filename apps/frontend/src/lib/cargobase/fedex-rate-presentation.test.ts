@@ -40,8 +40,17 @@ describe("FedEx rate delivery presentation", () => {
       amount: 58,
       currency: "USD",
     })).toBe(
-      "Servicio seleccionado: FedEx 2Day AM — Miércoles, 25 de noviembre de 2026 hasta las 12:00 — costo estimado: 58.00 USD"
+      "Servicio seleccionado: FedEx 2Day AM — Miércoles, 25 de noviembre de 2026 hasta las 12:00 — costo estimado según la respuesta de FedEx: 58.00 USD"
     );
+  });
+
+  it("explains when FedEx does not return an estimated delivery date", () => {
+    expect(selectedRateSummary({
+      service_name: "FedEx 2Day",
+      delivery_date: null,
+      amount: 64.2,
+      currency: "USD",
+    })).toContain("FedEx no proporcionó una fecha de entrega estimada");
   });
 
   it("groups services by delivery day and orders times within each day", () => {
