@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  fedexRateQuoteKey,
   fedexDraftFromCargobase,
   isInternationalFedexDraft,
 } from "./fedex";
@@ -85,6 +86,25 @@ describe("Cargobase to FedEx draft mapping", () => {
     }, "S123456789");
     expect(draft.sender.state).toBe("OH");
     expect(draft.recipient.state).toBe("MX-AGU");
+  });
+
+  it("keeps a selected rate tied to its shipment inputs but not its ship date", () => {
+    const draft = fedexDraftFromCargobase({
+      organization: { good_items: [{
+        units: 1, weight: 5, w_unit: "lb",
+        length: 10, width: 8, height: 4, m_unit: "in",
+      }] },
+      schedule: {
+        pickup_country_code: "US", pickup_zipcode: "43215",
+        stop1_country_code: "US", stop1_zipcode: "78701",
+      },
+    }, "S123456789");
+    const originalKey = fedexRateQuoteKey(draft);
+    expect(fedexRateQuoteKey({ ...draft, ship_date: "2026-11-25" })).toBe(originalKey);
+    expect(fedexRateQuoteKey({
+      ...draft,
+      packages: [{ ...draft.packages[0], weight: "6" }],
+    })).not.toBe(originalKey);
   });
 
   it("preserves inch and unknown measurements without inventing units", () => {

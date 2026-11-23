@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { FedexDraft } from "@/lib/cargobase/fedex";
+import { fedexRateQuoteKey, type FedexDraft } from "@/lib/cargobase/fedex";
 import { rateValidationErrors } from "@/lib/cargobase/fedex-rate-errors";
 import {
   formatRateAmount,
@@ -121,9 +121,11 @@ async function fetchRates(draft: FedexDraft, date: string): Promise<DateResult> 
 export default function FedexRates({
   draft,
   onSelect,
+  onRateSelected,
 }: {
   draft: FedexDraft;
   onSelect: (date: string, service: string) => void;
+  onRateSelected: (rate: Rate, shipDate: string, quoteKey: string) => void;
 }) {
   const [additionalDates, setAdditionalDates] = useState<string[]>([]);
   const [results, setResults] = useState<DateResult[] | null>(null);
@@ -133,10 +135,7 @@ export default function FedexRates({
   const [selectedRate, setSelectedRate] = useState<SelectedRate | null>(null);
   const dates = [draft.ship_date, ...additionalDates];
   const key = JSON.stringify(dates.map((date) => requestData(draft, date)).sort());
-  const quoteKey = JSON.stringify({
-    ...requestData(draft, draft.ship_date),
-    ship_date: undefined,
-  });
+  const quoteKey = fedexRateQuoteKey(draft);
   const currentResults = resultKey === key ? results : null;
   const currentSelection = selectedRate &&
     selectedRate.quoteKey === quoteKey &&
@@ -169,6 +168,7 @@ export default function FedexRates({
       rate,
       quoteKey,
     });
+    onRateSelected(rate, date, quoteKey);
     if (date !== draft.ship_date) {
       setAdditionalDates((current) =>
         current.map((item) => item === date ? draft.ship_date : item)

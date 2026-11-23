@@ -50,6 +50,30 @@ export type FedexDraft = {
   packages: FedexPackage[];
 };
 
+export function fedexRateQuoteKey(draft: FedexDraft): string {
+  const party = (value: FedexParty) => ({
+    country_code: value.country_code.trim(),
+    postal_code: value.postal_code.trim(),
+    city: value.city.trim(),
+    state: value.state.trim(),
+  });
+  return JSON.stringify({
+    pickup_type: draft.pickup_type,
+    packaging_type: draft.packaging_type.trim(),
+    sender: party(draft.sender),
+    recipient: party(draft.recipient),
+    packages: draft.packages.map((item) => ({
+      quantity: item.quantity,
+      weight: item.weight,
+      weight_units: item.weight_units,
+      length: item.length,
+      width: item.width,
+      height: item.height,
+      dimension_units: item.dimension_units,
+    })),
+  });
+}
+
 const isObj = (value: unknown): value is Obj =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
 

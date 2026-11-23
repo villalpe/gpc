@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Download, Mail, PackageCheck, Plus, Trash2 } from "lucide-react";
 import {
   fedexDraftFromCargobase,
+  fedexRateQuoteKey,
   isInternationalFedexDraft,
   type FedexDraft,
   type FedexCommodity,
@@ -24,6 +25,15 @@ type CreatedShipment = {
   warning?: string;
 };
 
+type SelectedFedexRate = {
+  billingWeight: number | null;
+  billingWeightUnits: string | null;
+  ratedWeightMethod: string | null;
+  shipDate: string;
+  service: string;
+  quoteKey: string;
+};
+
 const card =
   "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/15 dark:bg-white/[0.06]";
 const input =
@@ -38,6 +48,7 @@ function Field({
   type = "text",
   step,
   placeholder,
+  inputClassName,
 }: {
   title: string;
   value: string;
@@ -46,12 +57,13 @@ function Field({
   type?: string;
   step?: string;
   placeholder?: string;
+  inputClassName?: string;
 }) {
   return (
     <label className={label}>
       {title}
       <input
-        className={input}
+        className={`${input} ${inputClassName ?? ""}`}
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -113,7 +125,15 @@ function PartyFields({
     <section className={card}>
       <h2 className="mb-4 text-lg font-semibold">{title}</h2>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field title="Empresa" value={party.company_name} onChange={set("company_name")} required />
+        <Field
+          title="Empresa"
+          value={party.company_name}
+          onChange={set("company_name")}
+          required
+          inputClassName={title.startsWith("Remitente")
+            ? "border-sky-300 bg-sky-50 focus:border-sky-500 focus:ring-sky-500/20 dark:border-sky-400/40 dark:bg-sky-950/40"
+            : "border-amber-300 bg-amber-50 focus:border-amber-500 focus:ring-amber-500/20 dark:border-amber-400/40 dark:bg-amber-950/40"}
+        />
         <Field title="Contacto" value={party.person_name} onChange={set("person_name")} required />
         <Field title="Teléfono" value={party.phone_number} onChange={set("phone_number")} required />
         <Field title="Correo" type="email" value={party.email_address} onChange={set("email_address")} />
@@ -181,6 +201,7 @@ export default function FedexShipmentReviewPage() {
   const [notice, setNotice] = useState("");
   const [created, setCreated] = useState<CreatedShipment | null>(null);
   const [emailSent, setEmailSent] = useState(false);
+  const [selectedRate, setSelectedRate] = useState<SelectedFedexRate | null>(null);
   const isInternational = useMemo(
     () => (draft ? isInternationalFedexDraft(draft) : false),
     [draft]
@@ -191,6 +212,12 @@ export default function FedexShipmentReviewPage() {
   const updateRequesterEmail = useCallback((email: string) => {
     setDraft((current) => current ? { ...current, recipient_email: email } : current);
   }, []);
+  const currentSelectedRate = draft && selectedRate &&
+    selectedRate.shipDate === draft.ship_date &&
+    selectedRate.service === draft.service_type &&
+    selectedRate.quoteKey === fedexRateQuoteKey(draft)
+    ? selectedRate
+    : null;
 
   useEffect(() => {
     let active = true;
@@ -538,6 +565,14 @@ export default function FedexShipmentReviewPage() {
                 ? { ...current, ship_date: date, service_type: service }
                 : current)
             }
+            onRateSelected={(rate, shipDate, quoteKey) => setSelectedRate({
+              billingWeight: rate.billing_weight,
+              billingWeightUnits: rate.billing_weight_units,
+              ratedWeightMethod: rate.rated_weight_method,
+              shipDate,
+              service: rate.service_type,
+              quoteKey,
+            })}
           />
 
           <PartyFields title="Remitente (Cargobase)" party={draft.sender} onChange={(key, value) => updateParty("sender", key, value)} onSelect={(party) => setDraft({ ...draft, sender: party, service_type: "" })} />
@@ -553,6 +588,37 @@ export default function FedexShipmentReviewPage() {
               <button type="button" onClick={addPackage} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold dark:border-white/20">
                 <Plus className="h-4 w-4" /> Agregar paquete
               </button>
+            </div>
+            <div className={`mb-4 rounded-xl border-2 p-4 shadow-sm ${
+              currentSelectedRate
+                ? "border-indigo-500 bg-indigo-50 dark:border-indigo-400 dark:bg-indigo-500/10"
+                : "border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-white/[0.03]"
+            }`}>
+              <p className="text-xs font-bold uppercase tracking-wide text-indigo-800 dark:text-indigo-300">
+                Peso cobrable estimado · FedEx
+              </p>
+              {currentSelectedRate &&
+              typeof currentSelectedRate.billingWeight === "number" &&
+              currentSelectedRate.billingWeightUnits ? (
+                <>
+                  <p className="mt-1 text-2xl font-bold tabular-nums text-indigo-950 dark:text-indigo-100">
+                    {currentSelectedRate.billingWeight} {currentSelectedRate.billingWeightUnits}
+                    {currentSelectedRate.ratedWeightMethod === "ACTUAL"
+                      ? " · real"
+                      : currentSelectedRate.ratedWeightMethod === "DIM" ||
+                          currentSelectedRate.ratedWeightMethod === "DIMENSIONAL"
+                        ? " · volumétrico"
+                        : ""}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-600 dark:text-white/70">
+                    Peso del envío cotizado (todas las cajas), según FedEx; no es el peso por caja.
+                  </p>
+                </>
+              ) : (
+                <p className="mt-1 text-sm text-slate-600 dark:text-white/70">
+                  Selecciona una tarifa para ver el peso cobrable que FedEx devolvió. Si FedEx no lo incluye, aparecerá como no proporcionado.
+                </p>
+              )}
             </div>
             <div className="space-y-5">
               {draft.packages.map((item, index) => (
