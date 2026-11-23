@@ -90,8 +90,12 @@ export default function FedexNotificationPreferences({
   }
 
   return (
-    <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/15 dark:bg-white/[0.06]">
-      <h2 className="text-lg font-semibold">Preferencias de correo</h2>
+    <section className="overflow-hidden rounded-2xl border-2 border-violet-300 bg-white shadow-sm dark:border-violet-400/40 dark:bg-white/[0.06]">
+      <div className="border-b border-violet-200 bg-violet-100 px-5 py-3 text-violet-950 dark:border-violet-400/30 dark:bg-violet-900/40 dark:text-violet-100">
+        <p className="text-xs font-bold uppercase tracking-wider opacity-70">Notificaciones del envío</p>
+        <h2 className="mt-0.5 text-lg font-bold">Preferencias de correo</h2>
+      </div>
+      <div className="space-y-4 p-5">
       <p className="text-sm text-amber-700 dark:text-amber-300">
         Estas opciones solo se guardan para este CB; no activan ni envían avisos automáticos.
         La guía se envía por separado, con el botón manual posterior a su creación.
@@ -100,14 +104,14 @@ export default function FedexNotificationPreferences({
       {groups.map(({ key, title }) => (
         <fieldset key={key} disabled={loading || loadFailed || saving} className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-white/10">
           <legend className="font-semibold">{title}</legend>
-          <label className="block text-sm">Correo electrónico
+          <label className="block text-sm font-medium">Correo electrónico
             <input type="email" value={preferences[key].email} readOnly={key === "other"}
               onChange={(event) => {
                 const email = event.target.value;
                 setPreferences((current) => ({ ...current, [key]: { ...current[key], email } }));
                 if (key === "requester") onRequesterEmailChange(email);
               }}
-              className="ml-2 rounded-lg border border-slate-300 bg-white p-2 text-slate-900" />
+              className="mt-1 block w-full rounded-lg border-2 border-violet-300 bg-violet-50 px-3 py-2.5 text-base text-slate-900 outline-none focus:border-violet-600 focus:ring-2 focus:ring-violet-500/25 dark:border-violet-400/60 dark:bg-violet-950/60 dark:text-white" />
           </label>
           {events.map(({ key: eventKey, label }) => (
             <label key={eventKey} className="block text-sm">
@@ -124,6 +128,7 @@ export default function FedexNotificationPreferences({
         {saving ? "Guardando..." : "Guardar preferencias de correo"}
       </button>
       {message && <p role="status" className="text-sm">{message}</p>}
+      </div>
     </section>
   );
 }
