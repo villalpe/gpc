@@ -120,19 +120,35 @@ function PartyFields({
   onSelect: (party: FedexParty) => void;
 }) {
   const set = (key: keyof FedexParty) => (value: string) => onChange(key, value);
+  const isSender = title.startsWith("Remitente");
+  const sectionStyle = isSender
+    ? {
+        section: "border-sky-300 bg-sky-50/40 dark:border-sky-400/40 dark:bg-sky-950/15",
+        heading: "border-sky-200 bg-sky-100 text-sky-950 dark:border-sky-400/30 dark:bg-sky-900/40 dark:text-sky-100",
+        company: "!border-sky-400 !bg-sky-50 font-semibold focus:!border-sky-600 focus:!ring-sky-500/25 dark:!border-sky-400/60 dark:!bg-sky-950/60",
+      }
+    : {
+        section: "border-amber-300 bg-amber-50/40 dark:border-amber-400/40 dark:bg-amber-950/15",
+        heading: "border-amber-200 bg-amber-100 text-amber-950 dark:border-amber-400/30 dark:bg-amber-900/40 dark:text-amber-100",
+        company: "!border-amber-400 !bg-amber-50 font-semibold focus:!border-amber-600 focus:!ring-amber-500/25 dark:!border-amber-400/60 dark:!bg-amber-950/60",
+      };
 
   return (
-    <section className={card}>
-      <h2 className="mb-4 text-lg font-semibold">{title}</h2>
+    <section className={`${card} overflow-hidden border-2 p-0 ${sectionStyle.section}`}>
+      <div className={`border-b px-5 py-3 ${sectionStyle.heading}`}>
+        <p className="text-xs font-bold uppercase tracking-wider opacity-70">
+          {isSender ? "Origen del envío" : "Destino del envío"}
+        </p>
+        <h2 className="mt-0.5 text-lg font-bold">{title}</h2>
+      </div>
+      <div className="p-5">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
           title="Empresa"
           value={party.company_name}
           onChange={set("company_name")}
           required
-          inputClassName={title.startsWith("Remitente")
-            ? "border-sky-300 bg-sky-50 focus:border-sky-500 focus:ring-sky-500/20 dark:border-sky-400/40 dark:bg-sky-950/40"
-            : "border-amber-300 bg-amber-50 focus:border-amber-500 focus:ring-amber-500/20 dark:border-amber-400/40 dark:bg-amber-950/40"}
+          inputClassName={sectionStyle.company}
         />
         <Field title="Contacto" value={party.person_name} onChange={set("person_name")} required />
         <Field title="Teléfono" value={party.phone_number} onChange={set("phone_number")} required />
@@ -168,6 +184,7 @@ function PartyFields({
         />
       </div>
       <FedexSavedAddresses party={party} onSelect={onSelect} />
+      </div>
     </section>
   );
 }
