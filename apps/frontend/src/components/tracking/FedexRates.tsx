@@ -179,14 +179,25 @@ export default function FedexRates({
 
   function selectRateButton(result: DateResult, rate: Rate) {
     const delivery = rateDelivery(rate.delivery_date);
+    const isSelected = selectedRate?.quoteKey === quoteKey &&
+      selectedRate.shipDate === result.date &&
+      selectedRate.service === rate.service_type &&
+      draft.ship_date === result.date &&
+      draft.service_type === rate.service_type;
     return (
       <button
         type="button"
+        aria-pressed={isSelected}
+        disabled={isSelected}
         onClick={() => selectRate(result.date, rate)}
         aria-label={`Seleccionar ${rate.service_name}${delivery.timeLabel ? `, entrega a las ${delivery.timeLabel}` : ""}`}
-        className="font-semibold text-[#C1374A]"
+        className={`inline-flex min-w-28 items-center justify-center rounded-lg border px-3 py-1.5 font-semibold transition-colors ${
+          isSelected
+            ? "cursor-default border-emerald-700 bg-emerald-700 text-white dark:border-emerald-500 dark:bg-emerald-600"
+            : "border-[#C1374A] bg-[#C1374A] text-white hover:bg-[#a92f40] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C1374A] focus-visible:ring-offset-2"
+        }`}
       >
-        Seleccionar
+        {isSelected ? "Seleccionado" : "Seleccionar"}
       </button>
     );
   }
