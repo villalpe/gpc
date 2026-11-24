@@ -7,6 +7,11 @@ import { Download, Send } from "lucide-react";
 import TrackingHeader from "@/components/tracking/TrackingHeader";
 import { buildSheet, type Sheet } from "@/lib/cargobase/sheet";
 import { downloadSheetPdf } from "@/lib/cargobase/pdf";
+import {
+  carrierAvailability,
+  skydropxPrefillFromCargobase,
+  SKYDROPX_PREFILL_KEY,
+} from "@/lib/cargobase/carriers";
 
 type Quote = {
   quote_reference: string;
@@ -284,7 +289,27 @@ export default function RastreoCargobasePage() {
     }
   }
 
+  const availability = useMemo(
+    () => (result ? carrierAvailability(result, requestId) : null),
+    [result, requestId]
+  );
+
   function onCreateShipment(carrier: (typeof CARRIER_ACTIONS)[number]) {
+    if (carrier.id === "skydropx") {
+      if (result) {
+        try {
+          sessionStorage.setItem(
+            SKYDROPX_PREFILL_KEY,
+            JSON.stringify(skydropxPrefillFromCargobase(result))
+          );
+        } catch {
+          // sin prellenado si el navegador bloquea sessionStorage
+        }
+      }
+      router.push("/solicitar-cotizacion");
+      return;
+    }
+
     if (carrier.id === "fedex") {
       router.push(
         `/rastreo/cargobase/${encodeURIComponent(requestId)}/fedex`
@@ -432,12 +457,18 @@ export default function RastreoCargobasePage() {
           )}
 
           <div className="flex flex-wrap justify-end gap-3">
+            {availability && (
+              <p className="mr-auto self-center text-sm text-slate-600 dark:text-white/70">
+                {availability.origin || "?"} → {availability.destination || "?"}: {availability.message}
+              </p>
+            )}
             {CARRIER_ACTIONS.map((carrier) => (
               <button
                 key={carrier.id}
                 type="button"
+                disabled={!availability?.[carrier.id as "fedex" | "dhl" | "skydropx"]}
                 onClick={() => onCreateShipment(carrier)}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/20 dark:bg-white/10 dark:text-white"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/20 dark:bg-white/10 dark:text-white"
               >
                 <Send className="h-4 w-4" />
                 {carrier.label}

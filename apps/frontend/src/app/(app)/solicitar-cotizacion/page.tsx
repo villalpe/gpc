@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import SatClaveProdServCombobox from "@/components/quotes/SatClaveProdServCombobox";
+import { SKYDROPX_PREFILL_KEY, type SkydropxPrefill } from "@/lib/cargobase/carriers";
 
 /* ───────────── Tipos ───────────── */
 
@@ -425,6 +426,39 @@ export default function QuotePage() {
   useEffect(() => {
     void loadSavedAddresses();
     void loadSavedPackages();
+  }, []);
+
+  useEffect(() => {
+    // Prellenado enviado desde Solicitudes y cotizaciones (se usa una sola vez)
+    let raw: string | null = null;
+    try {
+      raw = sessionStorage.getItem(SKYDROPX_PREFILL_KEY);
+      sessionStorage.removeItem(SKYDROPX_PREFILL_KEY);
+    } catch {
+      return;
+    }
+    if (!raw) return;
+    queueMicrotask(() => {
+    try {
+      const data = JSON.parse(raw) as SkydropxPrefill;
+      const toAddress = (p: SkydropxPrefill["origin"]): Address => ({
+        country: p.country || "MX",
+        zip: p.zip || "",
+        state: p.state || "",
+        city: p.city || "",
+        area: "",
+      });
+      setOrigin(toAddress(data.origin));
+      setDestination(toAddress(data.destination));
+      if (data.parcels?.length) {
+        setPackages(
+          data.parcels.map((parcel) => ({ ...newPackage(), ...parcel }))
+        );
+      }
+    } catch {
+      // prellenado inválido: se ignora
+    }
+    });
   }, []);
 
   useEffect(() => {
