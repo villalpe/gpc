@@ -18,6 +18,7 @@ import { fedexRoute, fedexServices } from "@/lib/cargobase/fedex-services";
 import FedexRates from "@/components/tracking/FedexRates";
 import FedexSavedAddresses from "@/components/tracking/FedexSavedAddresses";
 import FedexNotificationPreferences from "@/components/tracking/FedexNotificationPreferences";
+import FedexCreationNotification, { type NotificationStatus } from "@/components/tracking/FedexCreationNotification";
 
 type CreatedShipment = {
   id: number;
@@ -26,6 +27,8 @@ type CreatedShipment = {
   tracking_numbers: string[];
   labels: { id: number; file_name: string }[];
   warning?: string;
+  notification_status: NotificationStatus;
+  notification_error: string;
 };
 
 type SelectedFedexRate = {
@@ -211,6 +214,7 @@ export default function FedexShipmentReviewPage() {
   const [notice, setNotice] = useState("");
   const [created, setCreated] = useState<CreatedShipment | null>(null);
   const [emailSent, setEmailSent] = useState(false);
+  const [preferencesReady, setPreferencesReady] = useState(false);
   const [confirmSandbox, setConfirmSandbox] = useState(false);
   const [selectedRate, setSelectedRate] = useState<SelectedFedexRate | null>(null);
   const isInternational = useMemo(
@@ -388,6 +392,10 @@ export default function FedexShipmentReviewPage() {
   async function createShipment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!draft) return;
+    if (!preferencesReady) {
+      setError("Guarda las preferencias de correo antes de crear la guía.");
+      return;
+    }
     if (!isDomesticUs) {
       setError("En esta primera etapa solo se pueden crear envíos domésticos dentro de Estados Unidos.");
       return;
@@ -518,6 +526,9 @@ export default function FedexShipmentReviewPage() {
             </div>
           </div>
           {created.warning && <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{created.warning}</p>}
+          {created.status === "created" && (
+            <FedexCreationNotification shipmentId={created.id} initialStatus={created.notification_status} initialError={created.notification_error} />
+          )}
           <div className="mt-4 flex flex-wrap gap-3">
             {created.labels.map((label, index) => (
               <a
@@ -742,6 +753,7 @@ export default function FedexShipmentReviewPage() {
             recipientEmail={draft.recipient.email_address}
             requesterEmail={draft.recipient_email}
             onRequesterEmailChange={updateRequesterEmail}
+            onReadyChange={setPreferencesReady}
           />
 
           {!isDomesticUs && (
@@ -759,8 +771,9 @@ export default function FedexShipmentReviewPage() {
             />
             <span>Confirmo que esta solicitud creará una guía FedEx en el entorno sandbox y que revisaré su resultado antes de repetirla.</span>
           </label>
+          {!preferencesReady && <p className="text-sm text-amber-700">Carga y guarda los cambios de preferencias de correo antes de crear la guía.</p>}
           <div className="flex justify-end">
-            <button type="submit" disabled={creating || !confirmSandbox || !isDomesticUs} className="inline-flex items-center gap-2 rounded-xl bg-[#C1374A] px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">
+            <button type="submit" disabled={creating || !confirmSandbox || !isDomesticUs || !preferencesReady} className="inline-flex items-center gap-2 rounded-xl bg-[#C1374A] px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">
               <PackageCheck className="h-4 w-4" /> {creating ? "Creando guía en sandbox..." : "Crear guía FedEx"}
             </button>
           </div>

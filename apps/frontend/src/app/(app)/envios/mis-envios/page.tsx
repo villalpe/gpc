@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import FedexCreationNotification, { type NotificationStatus } from "@/components/tracking/FedexCreationNotification";
 import {
   AlertCircle,
   ChevronDown,
@@ -69,6 +70,8 @@ type FedexHistoryShipment = {
   destination: { city: string; state: string };
   labels: { id: number; file_name: string }[];
   warning: string;
+  notification_status: NotificationStatus;
+  notification_error: string;
   error_detail: string;
   resolution_note: string;
   resolved_by_email: string;
@@ -131,6 +134,7 @@ export default function MisEnviosPage() {
   const [fedexLoading, setFedexLoading] = useState(true);
   const [fedexError, setFedexError] = useState("");
   const [canResolveFedex, setCanResolveFedex] = useState(false);
+  const [canNotifyFedex, setCanNotifyFedex] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -156,13 +160,14 @@ export default function MisEnviosPage() {
     try {
       const response = await fetch("/api/fedex/shipments", { cache: "no-store" });
       const data = (await response.json().catch(() => null)) as
-        | { shipments?: FedexHistoryShipment[]; can_resolve?: boolean; detail?: string }
+        | { shipments?: FedexHistoryShipment[]; can_resolve?: boolean; can_notify?: boolean; detail?: string }
         | null;
       if (!response.ok) {
         throw new Error(data?.detail || "No se pudo cargar el historial FedEx.");
       }
       setFedexShipments(data?.shipments ?? []);
       setCanResolveFedex(data?.can_resolve ?? false);
+      setCanNotifyFedex(data?.can_notify ?? false);
     } catch (reason) {
       setFedexError(reason instanceof Error ? reason.message : "No se pudo cargar el historial FedEx.");
     } finally {
@@ -535,6 +540,15 @@ export default function MisEnviosPage() {
                             {shipment.resolved_by_email && ` · ${shipment.resolved_by_email}`}
                             {shipment.resolved_at && ` · ${formatDate(shipment.resolved_at)}`}
                           </p>
+                        )}
+                        {shipment.status === "created" && (
+                          <FedexCreationNotification
+                            key={`${shipment.id}-${shipment.notification_status}`}
+                            shipmentId={shipment.id}
+                            initialStatus={shipment.notification_status}
+                            initialError={shipment.notification_error}
+                            canRetry={canNotifyFedex}
+                          />
                         )}
                       </td>
                       <td className="px-3 py-3">

@@ -24,6 +24,7 @@ from accounts.permissions import CanAccessQuotes, user_role_for_company
 from companies.models import Company
 from core.company_context import get_active_company_id
 
+from .fedex_notifications import GROUP_LABELS, send_creation_notification
 from .models import (
     FedexNotificationPreferences,
     FedexSavedAddress,
@@ -223,6 +224,8 @@ class FedexCreateShipmentView(APIView):
                 for label in shipment.labels.all()
             ],
             "warning": shipment.warning,
+            "notification_status": shipment.notification_status,
+            "notification_error": shipment.notification_error,
         }
 
     @staticmethod
@@ -317,6 +320,13 @@ class FedexCreateShipmentView(APIView):
         payload = build_fedex_shipment_request(data, settings.FEDEX_ACCOUNT_NUMBER)
         try:
             with transaction.atomic():
+                preferences = FedexNotificationPreferences.objects.filter(
+                    company_id=company_id, cb_number=data["cb_number"]
+                ).first()
+                groups = [
+                    group for group in GROUP_LABELS
+                    if preferences and preferences.preferences.get(group, {}).get("created")
+                ]
                 shipment = FedexShipment.objects.create(
                     company_id=company_id,
                     cb_number=data["cb_number"],
@@ -326,6 +336,11 @@ class FedexCreateShipmentView(APIView):
                     service_type=data["service_type"],
                     pickup_type=data["pickup_type"],
                     shipment_data=self._sanitize_snapshot(data),
+                    notification_groups=groups,
+                    notification_status=(
+                        FedexShipment.NotificationStatus.PENDING if groups
+                        else FedexShipment.NotificationStatus.NOT_REQUESTED
+                    ),
                 )
         except IntegrityError:
             existing = FedexShipment.objects.filter(
@@ -495,6 +510,11 @@ class FedexCreateShipmentView(APIView):
                     for file_name, content in decoded_labels
                 ]
             )
+        if (
+            shipment.status == FedexShipment.Status.CREATED
+            and shipment.notification_status == FedexShipment.NotificationStatus.PENDING
+        ):
+            send_creation_notification(shipment)
         return Response(
             self._shipment_response(shipment),
             status=status.HTTP_201_CREATED,
@@ -551,6 +571,8 @@ class FedexShipmentHistoryView(APIView):
                         for label in shipment.labels.all()
                     ],
                     "warning": shipment.warning,
+                    "notification_status": shipment.notification_status,
+                    "notification_error": shipment.notification_error,
                     "error_detail": shipment.error_detail,
                     "resolution_note": shipment.resolution_note,
                     "resolved_by_email": (
@@ -565,11 +587,40 @@ class FedexShipmentHistoryView(APIView):
             "shipments": results,
             "can_resolve": user_role_for_company(user, company_id)
             in {Role.SUPERADMIN, Role.ADMIN_COMPANY},
+            "can_notify": user_role_for_company(user, company_id)
+            in {Role.SUPERADMIN, Role.ADMIN_COMPANY, Role.OPERATOR},
         }
 
     def get(self, request):
         company_id = get_active_company_id(request)
         return Response(self.list_for_company(company_id, request.user))
+
+
+class FedexCreationNotificationRetryView(APIView):
+    permission_classes = [IsAuthenticated, CanAccessQuotes]
+
+    def post(self, request, shipment_id):
+        if not settings.FEDEX_SHIPMENT_CREATION_ENABLED:
+            return Response({"detail": "Los avisos FedEx están desactivados."}, status=503)
+        company_id, role = FedexCreateShipmentView._company_and_role(request)
+        if role not in {Role.SUPERADMIN, Role.ADMIN_COMPANY, Role.OPERATOR}:
+            raise PermissionDenied("No tienes permiso para enviar avisos FedEx.")
+        shipment = FedexShipment.objects.filter(
+            pk=shipment_id, company_id=company_id, status=FedexShipment.Status.CREATED
+        ).first()
+        if shipment is None:
+            return Response({"detail": "No se encontró el envío FedEx creado."}, status=404)
+        if not send_creation_notification(shipment):
+            return Response(
+                {"detail": "El aviso ya fue enviado, no fue solicitado o sigue en proceso.",
+                 "notification_status": shipment.notification_status,
+                 "notification_error": shipment.notification_error},
+                status=409,
+            )
+        return Response({
+            "notification_status": shipment.notification_status,
+            "notification_error": shipment.notification_error,
+        })
 
 
 class FedexShipmentLabelView(APIView):

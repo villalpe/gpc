@@ -2,6 +2,7 @@ from django.urls import path, re_path
 
 from .views import (
     FedexCreateShipmentView,
+    FedexCreationNotificationRetryView,
     FedexEmailShipmentView,
     FedexNotificationPreferencesView,
     FedexRatesView,
@@ -23,6 +24,11 @@ urlpatterns = [
     ),
     path("fedex/shipments/", FedexCreateShipmentView.as_view(), name="fedex-create-shipment"),
     path("fedex/shipments/email/", FedexEmailShipmentView.as_view(), name="fedex-email-shipment"),
+    path(
+        "fedex/shipments/<int:shipment_id>/retry-notification/",
+        FedexCreationNotificationRetryView.as_view(),
+        name="fedex-retry-notification",
+    ),
     path(
         "fedex/shipments/labels/<int:label_id>/",
         FedexShipmentLabelView.as_view(),

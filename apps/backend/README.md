@@ -31,7 +31,6 @@ Run `python manage.py migrate` to create the FedEx address, notification
 preference, shipment, and label tables. Saved addresses are shared within the
 active company, and notification preferences are stored per company and CB.
 Both require an active company membership with price-view permission.
-Preferences do not enable or send FedEx notifications.
 
 Shipment creation remains disabled unless `FEDEX_SHIPMENT_CREATION_ENABLED` is
 explicitly enabled, and the backend independently rejects creation unless
@@ -54,3 +53,24 @@ browser. Configure the backend SMTP sender with `EMAIL_HOST`, `EMAIL_PORT`,
 `DEFAULT_FROM_EMAIL`. For Gmail, use a mailbox app password rather than its
 normal sign-in password. Do not put these credentials in frontend or
 `NEXT_PUBLIC_` variables.
+
+Creation notifications are limited to FedEx sandbox. Set
+`FEDEX_CREATION_NOTIFICATION_TEST_EMAIL` in the backend environment to one
+authorized test inbox and configure SMTP as above. If a saved preference for
+the CB selects "Envío ha sido creado", the system sends one test message to
+that inbox only, listing the selected recipient categories; it never sends this
+notification to the actual contacts. The message includes the CB, tracking
+number, sender, recipient and service, but no labels. The selected categories
+are captured when creation begins; save preference changes before creating.
+No other notification events are sent yet. Existing shipments are not emailed
+retroactively.
+
+The shipment and labels are saved before attempting email. A missing or
+invalid configuration, or an SMTP failure, leaves the shipment created and
+the notice unconfirmed; retry it on the creation screen or in Mis envíos.
+SMTP acceptance does not guarantee delivery, and an error or interrupted
+request may still result in delivery. Check the test inbox before retrying to
+avoid duplicates. An attempt marked "sending" may be retried after five
+minutes only after checking the inbox. `EMAIL_TIMEOUT` defaults to 15 seconds.
+The separate manual label email is not redirected to this test inbox; it sends
+to the address explicitly entered for that action.

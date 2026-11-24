@@ -1,14 +1,15 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
 from django.core import mail
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from accounts.models import Membership, Role, User
 from companies.models import Company
-from integrations.models import FedexShipment, FedexShipmentLabel
+from integrations.models import FedexNotificationPreferences, FedexShipment, FedexShipmentLabel
 from integrations.providers.fedex.mappers import (
     build_fedex_shipment_request,
     map_fedex_shipment,
@@ -16,6 +17,7 @@ from integrations.providers.fedex.mappers import (
 from integrations.serializers import FedexCreateShipmentSerializer
 from integrations.views import (
     FedexCreateShipmentView,
+    FedexCreationNotificationRetryView,
     FedexEmailShipmentView,
     FedexShipmentHistoryView,
     FedexShipmentLabelView,
@@ -218,6 +220,7 @@ class FedexShipmentTests(TestCase):
         self.assertEqual(response.data["tracking_number"], "123456789012")
         self.assertEqual(response.data["status"], FedexShipment.Status.CREATED)
         self.assertEqual(len(response.data["labels"]), 1)
+        self.assertEqual(response.data["notification_status"], "not_requested")
         request_body = create_shipment.call_args.args[0]
         self.assertEqual(request_body["accountNumber"]["value"], "123456789")
         shipment = FedexShipment.objects.get(company=self.company, cb_number="S123456789")
@@ -232,6 +235,142 @@ class FedexShipmentTests(TestCase):
         force_authenticate(duplicate, user=self.user)
         self.assertEqual(FedexCreateShipmentView.as_view()(duplicate).status_code, 409)
         create_shipment.assert_called_once()
+
+    @override_settings(
+        FEDEX_SHIPMENT_CREATION_ENABLED=True,
+        FEDEX_ACCOUNT_NUMBER="123456789",
+        FEDEX_BASE_URL="https://apis-sandbox.fedex.com",
+        FEDEX_API_KEY="test-key",
+        FEDEX_SECRET_KEY="test-secret",
+        FEDEX_CREATION_NOTIFICATION_TEST_EMAIL="test-inbox@example.test",
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        EMAIL_HOST_USER="mailer@example.test",
+        EMAIL_HOST_PASSWORD="test",
+        DEFAULT_FROM_EMAIL="mailer@example.test",
+    )
+    @patch("integrations.views.FedexClient.create_shipment")
+    def test_creation_notice_is_test_only_and_snapshot_is_persisted(self, create_shipment):
+        create_shipment.return_value = {"output": {"transactionShipments": [{
+            "pieceResponses": [{"trackingNumber": "123456789012",
+                                "packageDocuments": [{"encodedLabel": "JVBERi0xLjQ="}]}]
+        }]}}
+        FedexNotificationPreferences.objects.create(
+            company=self.company, cb_number="S123456789", preferences={
+                "sender": {"email": "sender@example.com", "created": True},
+                "recipient": {"email": "recipient@example.com", "created": True},
+                "other": {"email": "other@example.com", "created": False},
+                "requester": {"email": "requester@example.com", "created": False},
+            },
+        )
+        self.payload["sender"]["country_code"] = "US"
+        self.payload["service_type"] = "FEDEX_2_DAY"
+        self.payload["packages"][0]["customs_items"] = []
+        request = APIRequestFactory().post("/", self.payload, format="json", **self.headers)
+        force_authenticate(request, user=self.user)
+        response = FedexCreateShipmentView.as_view()(request)
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["notification_status"], "sent")
+        shipment = FedexShipment.objects.get(pk=response.data["id"])
+        self.assertEqual(shipment.notification_groups, ["sender", "recipient"])
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["test-inbox@example.test"])
+        self.assertEqual(mail.outbox[0].attachments, [])
+        for value in ("S123456789", "123456789012", "GPC Sender", "Receiver", "FEDEX_2_DAY"):
+            self.assertIn(value, mail.outbox[0].body)
+        self.assertIn("Remitente, Destinatario", mail.outbox[0].body)
+
+        retry = APIRequestFactory().post("/", {}, format="json", **self.headers)
+        force_authenticate(retry, user=self.user)
+        result = FedexCreationNotificationRetryView.as_view()(retry, shipment_id=shipment.id)
+        self.assertEqual(result.status_code, 409)
+        self.assertEqual(len(mail.outbox), 1)
+
+    @override_settings(
+        FEDEX_SHIPMENT_CREATION_ENABLED=True,
+        FEDEX_BASE_URL="https://apis-sandbox.fedex.com",
+        FEDEX_CREATION_NOTIFICATION_TEST_EMAIL="test-inbox@example.test",
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        EMAIL_HOST_USER="mailer@example.test",
+        EMAIL_HOST_PASSWORD="test",
+        DEFAULT_FROM_EMAIL="mailer@example.test",
+    )
+    def test_failed_notice_retry_is_scoped_and_never_recreates_shipment(self):
+        shipment = FedexShipment.objects.create(
+            company=self.company, cb_number="S123456789", created_by=self.user,
+            status="created", ship_date=date(2026, 11, 18), service_type="FEDEX_2_DAY",
+            pickup_type="DROPOFF_AT_FEDEX_LOCATION", tracking_number="123456789012",
+            shipment_data={"sender": {"company_name": "A"}, "recipient": {"company_name": "B"}},
+            notification_groups=["sender"], notification_status="pending",
+        )
+        def retry():
+            request = APIRequestFactory().post("/", {}, format="json", **self.headers)
+            force_authenticate(request, user=self.user)
+            return FedexCreationNotificationRetryView.as_view()(request, shipment_id=shipment.id)
+
+        with override_settings(FEDEX_BASE_URL="https://apis.fedex.com"):
+            result = retry()
+        self.assertEqual(result.data["notification_status"], "failed")
+        self.assertIn("sandbox", result.data["notification_error"])
+        self.assertEqual(len(getattr(mail, "outbox", [])), 0)
+        with override_settings(FEDEX_CREATION_NOTIFICATION_TEST_EMAIL="not-an-email"):
+            result = retry()
+        self.assertEqual(result.data["notification_status"], "failed")
+        self.assertIn("no es válida", result.data["notification_error"])
+        self.assertEqual(len(getattr(mail, "outbox", [])), 0)
+
+        with patch(
+            "integrations.fedex_notifications.EmailMessage.send", side_effect=OSError("test")
+        ):
+            response = retry()
+        self.assertEqual(response.data["notification_status"], "failed")
+        shipment.refresh_from_db()
+        self.assertEqual(shipment.status, "created")
+        self.assertEqual(retry().data["notification_status"], "sent")
+        self.assertEqual(len(mail.outbox), 1)
+
+        shipment.notification_status = "sending"
+        shipment.notification_attempted_at = timezone.now()
+        shipment.save()
+        self.assertEqual(retry().status_code, 409)
+        shipment.notification_attempted_at = timezone.now() - timedelta(minutes=6)
+        shipment.save()
+        self.assertEqual(retry().data["notification_status"], "sent")
+
+        other = Company.objects.create(legal_name="Company B", slug="company-b")
+        shipment.company = other
+        shipment.save()
+        self.assertEqual(retry().status_code, 404)
+
+    @override_settings(
+        FEDEX_SHIPMENT_CREATION_ENABLED=True,
+        FEDEX_ACCOUNT_NUMBER="123456789",
+        FEDEX_BASE_URL="https://apis-sandbox.fedex.com",
+        FEDEX_API_KEY="test-key",
+        FEDEX_SECRET_KEY="test-secret",
+        FEDEX_CREATION_NOTIFICATION_TEST_EMAIL="",
+    )
+    @patch("integrations.views.FedexClient.create_shipment")
+    def test_missing_test_inbox_does_not_prevent_creation(self, create_shipment):
+        create_shipment.return_value = {"output": {"transactionShipments": [{
+            "pieceResponses": [{"trackingNumber": "123456789012",
+                                "packageDocuments": [{"encodedLabel": "JVBERi0xLjQ="}]}]
+        }]}}
+        FedexNotificationPreferences.objects.create(
+            company=self.company, cb_number="S123456789",
+            preferences={"sender": {"email": "sender@example.com", "created": True}},
+        )
+        self.payload["sender"]["country_code"] = "US"
+        self.payload["service_type"] = "FEDEX_2_DAY"
+        self.payload["packages"][0]["customs_items"] = []
+        request = APIRequestFactory().post("/", self.payload, format="json", **self.headers)
+        force_authenticate(request, user=self.user)
+        response = FedexCreateShipmentView.as_view()(request)
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["status"], "created")
+        self.assertEqual(response.data["notification_status"], "failed")
+        self.assertIn("dirección de prueba", response.data["notification_error"])
+        self.assertTrue(FedexShipment.objects.get(pk=response.data["id"]).labels.exists())
 
     @override_settings(
         FEDEX_SHIPMENT_CREATION_ENABLED=True,

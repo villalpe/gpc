@@ -29,13 +29,14 @@ function empty(email: string): Recipient {
 }
 
 export default function FedexNotificationPreferences({
-  cbNumber, senderEmail, recipientEmail, requesterEmail, onRequesterEmailChange,
+  cbNumber, senderEmail, recipientEmail, requesterEmail, onRequesterEmailChange, onReadyChange,
 }: {
   cbNumber: string;
   senderEmail: string;
   recipientEmail: string;
   requesterEmail: string;
   onRequesterEmailChange: (email: string) => void;
+  onReadyChange: (ready: boolean) => void;
 }) {
   const [preferences, setPreferences] = useState<Preferences>(() => ({
     sender: empty(senderEmail), recipient: empty(recipientEmail),
@@ -57,6 +58,7 @@ export default function FedexNotificationPreferences({
           setPreferences(data.preferences);
           onRequesterEmailChange(data.preferences.requester.email);
         }
+        if (active) onReadyChange(true);
       } catch (error) {
         if (active) {
           setLoadFailed(true);
@@ -68,7 +70,7 @@ export default function FedexNotificationPreferences({
     }
     void load();
     return () => { active = false; };
-  }, [cbNumber, onRequesterEmailChange]);
+  }, [cbNumber, onRequesterEmailChange, onReadyChange]);
 
   async function save() {
     setSaving(true);
@@ -81,7 +83,8 @@ export default function FedexNotificationPreferences({
       });
       const data = await response.json();
       if (!response.ok) throw new Error(rateValidationErrors(data).join(" ") || "No se pudieron guardar las preferencias.");
-      setMessage("Preferencias guardadas para este CB. No se enviarán avisos automáticos.");
+      onReadyChange(true);
+      setMessage("Preferencias guardadas para este CB.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "No se pudieron guardar las preferencias.");
     } finally {
@@ -97,9 +100,10 @@ export default function FedexNotificationPreferences({
       </div>
       <div className="space-y-4 p-5">
       <p className="text-sm text-amber-700 dark:text-amber-300">
-        Estas opciones solo se guardan para este CB; no activan ni envían avisos automáticos.
-        La guía se envía por separado, con el botón manual posterior a su creación.
-        Revisa los correos antes de guardar; son independientes de los campos de dirección.
+        Guarda las preferencias antes de crear la guía. Si seleccionas «Envío ha sido creado»,
+        se enviará un único aviso de prueba a la dirección configurada en el backend, nunca a
+        estos contactos. Los demás avisos aún no se envían. Las etiquetas se envían por separado
+        con el botón manual posterior a la creación. Los correos son independientes de las direcciones.
       </p>
       {groups.map(({ key, title }) => (
         <fieldset key={key} disabled={loading || loadFailed || saving} className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-white/10">
@@ -108,6 +112,7 @@ export default function FedexNotificationPreferences({
             <input type="email" value={preferences[key].email} readOnly={key === "other"}
               onChange={(event) => {
                 const email = event.target.value;
+                onReadyChange(false);
                 setPreferences((current) => ({ ...current, [key]: { ...current[key], email } }));
                 if (key === "requester") onRequesterEmailChange(email);
               }}
@@ -116,9 +121,12 @@ export default function FedexNotificationPreferences({
           {events.map(({ key: eventKey, label }) => (
             <label key={eventKey} className="block text-sm">
               <input type="checkbox" checked={preferences[key][eventKey]}
-                onChange={(event) => setPreferences((current) => ({
-                  ...current, [key]: { ...current[key], [eventKey]: event.target.checked },
-                }))} /> {label}
+                onChange={(event) => {
+                  onReadyChange(false);
+                  setPreferences((current) => ({
+                    ...current, [key]: { ...current[key], [eventKey]: event.target.checked },
+                  }));
+                }} /> {label}
             </label>
           ))}
         </fieldset>

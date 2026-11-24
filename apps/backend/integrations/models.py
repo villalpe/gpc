@@ -35,6 +35,13 @@ class FedexShipment(models.Model):
         UNCERTAIN = "uncertain", "Resultado por verificar"
         FAILED = "failed", "FedEx rechazó la solicitud"
 
+    class NotificationStatus(models.TextChoices):
+        NOT_REQUESTED = "not_requested", "No solicitado"
+        PENDING = "pending", "Pendiente"
+        SENDING = "sending", "Enviando"
+        SENT = "sent", "Aceptado por el servidor de correo"
+        FAILED = "failed", "No confirmado"
+
     company = models.ForeignKey(
         "companies.Company", on_delete=models.CASCADE, related_name="fedex_shipments"
     )
@@ -52,6 +59,13 @@ class FedexShipment(models.Model):
     tracking_number = models.CharField(max_length=40, blank=True, default="")
     tracking_numbers = models.JSONField(default=list)
     shipment_data = models.JSONField()
+    notification_status = models.CharField(
+        max_length=20, choices=NotificationStatus.choices,
+        default=NotificationStatus.NOT_REQUESTED,
+    )
+    notification_groups = models.JSONField(default=list)
+    notification_attempted_at = models.DateTimeField(null=True, blank=True)
+    notification_error = models.CharField(max_length=250, blank=True, default="")
     error_detail = models.CharField(max_length=500, blank=True, default="")
     warning = models.CharField(max_length=500, blank=True, default="")
     fedex_transaction_id = models.CharField(max_length=100, blank=True, default="")
