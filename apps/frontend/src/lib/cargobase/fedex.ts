@@ -161,31 +161,39 @@ function party(root: unknown, point: "pickup" | "stop1"): FedexParty {
   };
 }
 
+const WEIGHT_UNITS: Record<string, string> = {
+  KG: "KG",
+  KGS: "KG",
+  KILOGRAM: "KG",
+  KILOGRAMS: "KG",
+  LB: "LB",
+  LBS: "LB",
+  POUND: "LB",
+  POUNDS: "LB",
+};
+
+function weightInPounds(weight: unknown, weightUnit: unknown) {
+  const raw = string(weight);
+  const units = unit(weightUnit, WEIGHT_UNITS);
+  if (!raw) return { weight: raw, weight_units: units };
+  if (units !== "KG") return { weight: raw, weight_units: units };
+  const number = Number(raw);
+  if (!Number.isFinite(number) || number <= 0) return { weight: raw, weight_units: units };
+  return { weight: String(Math.round(number * 2.20462 * 100) / 100), weight_units: "LB" };
+}
+
 function commodityFromItem(value: unknown, item: Obj, usePackageValues: boolean) {
   const customs = isObj(value) ? value : {};
+  const commodityWeight = weightInPounds(
+    first(customs.weight, usePackageValues ? item.weight : ""),
+    first(customs.weight_units, customs.w_unit, usePackageValues ? item.w_unit : "")
+  );
   return {
     description: string(customs.description),
     hs_code: string(customs.hs_code),
     origin_country: string(customs.origin_country).toUpperCase(),
     quantity: string(first(customs.quantity, usePackageValues ? item.units : "")),
-    weight: string(first(customs.weight, usePackageValues ? item.weight : "")),
-    weight_units: unit(
-      first(
-        customs.weight_units,
-        customs.w_unit,
-        usePackageValues ? item.w_unit : ""
-      ),
-      {
-      KG: "KG",
-      KGS: "KG",
-      KILOGRAM: "KG",
-      KILOGRAMS: "KG",
-      LB: "LB",
-      LBS: "LB",
-      POUND: "LB",
-      POUNDS: "LB",
-      }
-    ),
+    ...commodityWeight,
     customs_value: string(customs.value),
     customs_currency: string(customs.currency_code).toUpperCase(),
   };
@@ -222,19 +230,10 @@ function packageFromItem(value: unknown): FedexPackage {
     if (!Number.isFinite(number) || number <= 0) return raw;
     return String(Math.max(1, Math.round(number / 2.54)));
   };
+  const packageWeight = weightInPounds(item.weight, item.w_unit);
   return {
     quantity: string(first(item.units, "1")),
-    weight: string(item.weight),
-    weight_units: unit(item.w_unit, {
-      KG: "KG",
-      KGS: "KG",
-      KILOGRAM: "KG",
-      KILOGRAMS: "KG",
-      LB: "LB",
-      LBS: "LB",
-      POUND: "LB",
-      POUNDS: "LB",
-    }),
+    ...packageWeight,
     length: dimension(item.length),
     width: dimension(item.width),
     height: dimension(item.height),

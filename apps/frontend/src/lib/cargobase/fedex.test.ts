@@ -90,7 +90,10 @@ describe("Cargobase to FedEx draft mapping", () => {
 
     expect(draft.sender.country_code).toBe("MX");
     expect(draft.recipient.country_code).toBe("US");
-    expect(draft.packages[0].weight_units).toBe("KG");
+    expect(draft.packages[0].weight).toBe("3.31");
+    expect(draft.packages[0].weight_units).toBe("LB");
+    expect(draft.packages[0].customs_items[1].weight).toBe("0.55");
+    expect(draft.packages[0].customs_items[1].weight_units).toBe("LB");
     expect(draft.packages[0].dimension_units).toBe("IN");
     expect([draft.packages[0].length, draft.packages[0].width, draft.packages[0].height])
       .toEqual(["8", "6", "4"]);
