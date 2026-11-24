@@ -577,10 +577,20 @@ export default function FedexShipmentReviewPage() {
                 </span>
               </label>
               <label className={label}>
-                Entrega del paquete
-                <input className={input} value="Dejar en una ubicación FedEx" readOnly />
+                Entrega o recolección
+                <select
+                  className={input}
+                  value={draft.pickup_type}
+                  onChange={(event) => setDraft({ ...draft, pickup_type: event.target.value })}
+                  required
+                >
+                  <option value="DROPOFF_AT_FEDEX_LOCATION">DROPOFF_AT_FEDEX_LOCATION</option>
+                  <option value="CONTACT_FEDEX_TO_SCHEDULE" disabled>CONTACT_FEDEX_TO_SCHEDULE</option>
+                  <option value="USE_SCHEDULED_PICKUP" disabled>USE_SCHEDULED_PICKUP</option>
+                </select>
                 <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-white/60">
-                  La creación automática de recolecciones queda deshabilitada en esta etapa.
+                  DROPOFF_AT_FEDEX_LOCATION significa dejar el paquete en FedEx; no agenda una recolección.
+                  Las otras opciones están deshabilitadas por ahora.
                 </span>
               </label>
               <label className={label}>Tipo de empaque FedEx

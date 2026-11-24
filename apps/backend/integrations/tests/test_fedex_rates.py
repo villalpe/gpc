@@ -56,6 +56,8 @@ class FedexRateTests(SimpleTestCase):
         payload = build_rate_request(serializer.validated_data, "test-account")
         shipment = payload["requestedShipment"]
         self.assertEqual(len(shipment["requestedPackageLineItems"]), 2)
+        self.assertEqual(shipment["pickupType"], "DROPOFF_AT_FEDEX_LOCATION")
+        self.assertEqual(shipment["packagingType"], "YOUR_PACKAGING")
         self.assertNotIn("serviceType", shipment)
         self.assertEqual(shipment["rateRequestType"], ["ACCOUNT"])
         self.assertTrue(payload["rateRequestControlParameters"]["returnTransitTimes"])
