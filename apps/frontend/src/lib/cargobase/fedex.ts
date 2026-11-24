@@ -1,5 +1,7 @@
 type Obj = Record<string, unknown>;
 
+const FEDEX_DROPOFF = "DROPOFF_AT_FEDEX_LOCATION";
+
 export type FedexParty = {
   company_name: string;
   person_name: string;
@@ -53,7 +55,7 @@ export type FedexDraft = {
 export function fedexDomesticShipmentPayload(draft: FedexDraft) {
   return {
     ...draft,
-    pickup_type: "DROPOFF_AT_FEDEX_LOCATION",
+    pickup_type: FEDEX_DROPOFF,
     duties_payment_type: undefined,
     duties_account_number: undefined,
     packages: draft.packages.map((item) => ({
@@ -258,7 +260,7 @@ export function fedexDraftFromCargobase(
     cb_number: cbNumber,
     ship_date: `${year}-${month}-${day}`,
     service_type: "",
-    pickup_type: "",
+    pickup_type: FEDEX_DROPOFF,
     packaging_type: "YOUR_PACKAGING",
     payment_type: "",
     payment_account_number: "",

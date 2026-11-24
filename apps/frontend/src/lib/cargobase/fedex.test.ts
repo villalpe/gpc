@@ -19,9 +19,11 @@ describe("Cargobase to FedEx draft mapping", () => {
     const payload = JSON.parse(JSON.stringify(fedexDomesticShipmentPayload(draft)));
 
     expect(draft.packages[0].customs_items).toHaveLength(1);
+    expect(draft.pickup_type).toBe("DROPOFF_AT_FEDEX_LOCATION");
+    expect(JSON.parse(fedexRateQuoteKey(draft)).pickup_type).toBe(draft.pickup_type);
     expect(payload).not.toHaveProperty("duties_payment_type");
     expect(payload).not.toHaveProperty("duties_account_number");
-    expect(payload.pickup_type).toBe("DROPOFF_AT_FEDEX_LOCATION");
+    expect(payload.pickup_type).toBe(draft.pickup_type);
     expect(payload.packages).toHaveLength(2);
     for (const [index, item] of payload.packages.entries()) {
       expect(item).not.toHaveProperty("customs_items");
