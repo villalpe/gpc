@@ -1,23 +1,38 @@
-import base64
 from datetime import date
 from decimal import Decimal
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.core import mail
-from django.test import SimpleTestCase, override_settings
+from django.test import TestCase, override_settings
 from rest_framework.test import APIRequestFactory, force_authenticate
 
+from accounts.models import Membership, Role, User
+from companies.models import Company
+from integrations.models import FedexShipment, FedexShipmentLabel
 from integrations.providers.fedex.mappers import (
     build_fedex_shipment_request,
     map_fedex_shipment,
 )
 from integrations.serializers import FedexCreateShipmentSerializer
-from integrations.views import FedexCreateShipmentView, FedexEmailShipmentView
+from integrations.views import (
+    FedexCreateShipmentView,
+    FedexEmailShipmentView,
+    FedexShipmentHistoryView,
+    FedexShipmentLabelView,
+    FedexShipmentResolveView,
+)
 
 
-class FedexShipmentTests(SimpleTestCase):
+class FedexShipmentTests(TestCase):
     def setUp(self):
+        self.company = Company.objects.create(legal_name="Company A", slug="company-a")
+        self.user = User.objects.create_user(
+            email="operator@example.test", password="test-password"
+        )
+        Membership.objects.create(
+            user=self.user, company=self.company, role=Role.OPERATOR
+        )
+        self.headers = {"HTTP_X_COMPANY_ID": str(self.company.id)}
         self.payload = {
             "cb_number": "S123456789",
             "ship_date": date(2026, 11, 18),
@@ -25,6 +40,7 @@ class FedexShipmentTests(SimpleTestCase):
             "pickup_type": "DROPOFF_AT_FEDEX_LOCATION",
             "packaging_type": "YOUR_PACKAGING",
             "payment_type": "SENDER",
+            "payment_account_number": "987654321",
             "sender": {
                 "company_name": "GPC Sender",
                 "person_name": "Sender Contact",
@@ -185,21 +201,318 @@ class FedexShipmentTests(SimpleTestCase):
             }
         }
         self.payload["packages"][0]["customs_items"] = []
+        self.payload["service_type"] = "FEDEX_2_DAY"
         self.payload["sender"]["country_code"] = "US"
         self.payload["recipient"]["country_code"] = "US"
         request = APIRequestFactory().post(
             "/api/integrations/fedex/shipments/",
             self.payload,
             format="json",
+            **self.headers,
         )
-        force_authenticate(request, user=SimpleNamespace(is_authenticated=True))
+        force_authenticate(request, user=self.user)
 
         response = FedexCreateShipmentView.as_view()(request)
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["tracking_number"], "123456789012")
+        self.assertEqual(response.data["status"], FedexShipment.Status.CREATED)
+        self.assertEqual(len(response.data["labels"]), 1)
         request_body = create_shipment.call_args.args[0]
         self.assertEqual(request_body["accountNumber"]["value"], "123456789")
+        shipment = FedexShipment.objects.get(company=self.company, cb_number="S123456789")
+        self.assertNotIn("payment_account_number", shipment.shipment_data)
+        self.assertEqual(bytes(shipment.labels.get().content), b"%PDF-1.4")
+        duplicate = APIRequestFactory().post(
+            "/api/integrations/fedex/shipments/",
+            self.payload,
+            format="json",
+            **self.headers,
+        )
+        force_authenticate(duplicate, user=self.user)
+        self.assertEqual(FedexCreateShipmentView.as_view()(duplicate).status_code, 409)
+        create_shipment.assert_called_once()
+
+    @override_settings(
+        FEDEX_SHIPMENT_CREATION_ENABLED=True,
+        FEDEX_ACCOUNT_NUMBER="123456789",
+        FEDEX_BASE_URL="https://apis-sandbox.fedex.com",
+        FEDEX_API_KEY="test-key",
+        FEDEX_SECRET_KEY="test-secret",
+    )
+    @patch("integrations.views.FedexClient.create_shipment")
+    def test_timeout_marks_shipment_uncertain_and_blocks_retry(self, create_shipment):
+        import requests
+
+        create_shipment.side_effect = requests.Timeout
+        self.payload["sender"]["country_code"] = "US"
+        self.payload["service_type"] = "FEDEX_2_DAY"
+        self.payload["packages"][0]["customs_items"] = []
+        request = APIRequestFactory().post(
+            "/api/integrations/fedex/shipments/",
+            self.payload,
+            format="json",
+            **self.headers,
+        )
+        force_authenticate(request, user=self.user)
+        response = FedexCreateShipmentView.as_view()(request)
+        self.assertEqual(response.status_code, 504)
+        self.assertEqual(
+            FedexShipment.objects.get(company=self.company).status,
+            FedexShipment.Status.UNCERTAIN,
+        )
+
+        retry = APIRequestFactory().post(
+            "/api/integrations/fedex/shipments/",
+            self.payload,
+            format="json",
+            **self.headers,
+        )
+        force_authenticate(retry, user=self.user)
+        self.assertEqual(FedexCreateShipmentView.as_view()(retry).status_code, 409)
+        create_shipment.assert_called_once()
+
+    @override_settings(
+        FEDEX_SHIPMENT_CREATION_ENABLED=True,
+        FEDEX_ACCOUNT_NUMBER="123456789",
+        FEDEX_BASE_URL="https://apis-sandbox.fedex.com",
+        FEDEX_API_KEY="test-key",
+        FEDEX_SECRET_KEY="test-secret",
+    )
+    @patch("integrations.views.FedexClient.create_shipment")
+    def test_definite_rejection_is_recorded_and_allows_a_retry(self, create_shipment):
+        import requests
+
+        self.payload["sender"]["country_code"] = "US"
+        self.payload["service_type"] = "FEDEX_2_DAY"
+        self.payload["packages"][0]["customs_items"] = []
+        rejected = requests.Response()
+        rejected.status_code = 400
+        rejected._content = b'{"errors":[{"code":"INVALID_REQUEST"}]}'
+        created_response = {
+            "output": {
+                "transactionShipments": [
+                    {
+                        "pieceResponses": [
+                            {
+                                "trackingNumber": "123456789012",
+                                "packageDocuments": [{"encodedLabel": "JVBERi0xLjQ="}],
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+        create_shipment.side_effect = [
+            requests.HTTPError(response=rejected),
+            created_response,
+        ]
+
+        first = APIRequestFactory().post(
+            "/api/integrations/fedex/shipments/",
+            self.payload,
+            format="json",
+            **self.headers,
+        )
+        force_authenticate(first, user=self.user)
+        self.assertEqual(FedexCreateShipmentView.as_view()(first).status_code, 400)
+        self.assertEqual(
+            FedexShipment.objects.get(company=self.company).status,
+            FedexShipment.Status.FAILED,
+        )
+
+        retry = APIRequestFactory().post(
+            "/api/integrations/fedex/shipments/",
+            self.payload,
+            format="json",
+            **self.headers,
+        )
+        force_authenticate(retry, user=self.user)
+        self.assertEqual(FedexCreateShipmentView.as_view()(retry).status_code, 201)
+        self.assertEqual(
+            FedexShipment.objects.filter(company=self.company, cb_number="S123456789").count(),
+            2,
+        )
+        self.assertNotIn(
+            "payment_account_number",
+            FedexShipment.objects.filter(company=self.company)
+            .order_by("created_at")
+            .first()
+            .shipment_data,
+        )
+
+    @override_settings(
+        FEDEX_SHIPMENT_CREATION_ENABLED=True,
+        FEDEX_ACCOUNT_NUMBER="123456789",
+        FEDEX_BASE_URL="https://apis-sandbox.fedex.com",
+        FEDEX_API_KEY="test-key",
+        FEDEX_SECRET_KEY="test-secret",
+    )
+    @patch("integrations.views.FedexClient.create_shipment")
+    def test_creation_rejects_pickup_and_non_sandbox(self, create_shipment):
+        self.payload["sender"]["country_code"] = "US"
+        self.payload["service_type"] = "FEDEX_2_DAY"
+        self.payload["packages"][0]["customs_items"] = []
+        self.payload["pickup_type"] = "CONTACT_FEDEX_TO_SCHEDULE"
+        pickup_request = APIRequestFactory().post(
+            "/api/integrations/fedex/shipments/",
+            self.payload,
+            format="json",
+            **self.headers,
+        )
+        force_authenticate(pickup_request, user=self.user)
+        self.assertEqual(
+            FedexCreateShipmentView.as_view()(pickup_request).status_code, 400
+        )
+        create_shipment.assert_not_called()
+
+        self.payload["pickup_type"] = "DROPOFF_AT_FEDEX_LOCATION"
+        self.company.is_active = False
+        self.company.save(update_fields=["is_active"])
+        inactive_company_request = APIRequestFactory().post(
+            "/api/integrations/fedex/shipments/",
+            self.payload,
+            format="json",
+            **self.headers,
+        )
+        force_authenticate(inactive_company_request, user=self.user)
+        self.assertEqual(
+            FedexCreateShipmentView.as_view()(inactive_company_request).status_code,
+            403,
+        )
+        self.company.is_active = True
+        self.company.save(update_fields=["is_active"])
+
+        with override_settings(FEDEX_BASE_URL="https://apis.fedex.com"):
+            production_request = APIRequestFactory().post(
+                "/api/integrations/fedex/shipments/",
+                self.payload,
+                format="json",
+                **self.headers,
+            )
+            force_authenticate(production_request, user=self.user)
+            response = FedexCreateShipmentView.as_view()(production_request)
+        self.assertEqual(response.status_code, 503)
+        self.assertFalse(FedexShipment.objects.exists())
+        create_shipment.assert_not_called()
+
+    def test_history_and_label_download_are_company_scoped(self):
+        shipment = FedexShipment.objects.create(
+            company=self.company,
+            cb_number="S123456789",
+            created_by=self.user,
+            status=FedexShipment.Status.CREATED,
+            ship_date=date(2026, 11, 18),
+            service_type="FEDEX_2_DAY",
+            pickup_type="DROPOFF_AT_FEDEX_LOCATION",
+            tracking_number="123456789012",
+            tracking_numbers=["123456789012"],
+            shipment_data={"sender": {"city": "Austin"}, "recipient": {"city": "Dallas"}},
+        )
+        label = FedexShipmentLabel.objects.create(
+            shipment=shipment,
+            file_name="S123456789-fedex-label-1.pdf",
+            content=b"%PDF-1.4 test",
+        )
+        history_request = APIRequestFactory().get(
+            "/api/integrations/fedex/shipments/", **self.headers
+        )
+        force_authenticate(history_request, user=self.user)
+        history = FedexShipmentHistoryView.as_view()(history_request)
+        self.assertEqual(len(history.data["shipments"]), 1)
+        self.assertNotIn("content", history.data["shipments"][0]["labels"][0])
+
+        label_request = APIRequestFactory().get(
+            f"/api/integrations/fedex/shipments/labels/{label.id}/",
+            **self.headers,
+        )
+        force_authenticate(label_request, user=self.user)
+        downloaded = FedexShipmentLabelView.as_view()(label_request, label_id=label.id)
+        self.assertEqual(downloaded.status_code, 200)
+        self.assertEqual(downloaded.content, b"%PDF-1.4 test")
+
+        other = Company.objects.create(legal_name="Company B", slug="company-b")
+        Membership.objects.create(user=self.user, company=other, role=Role.OPERATOR)
+        other_headers = {"HTTP_X_COMPANY_ID": str(other.id)}
+        cross_company_request = APIRequestFactory().get(
+            f"/api/integrations/fedex/shipments/labels/{label.id}/",
+            **other_headers,
+        )
+        force_authenticate(cross_company_request, user=self.user)
+        denied = FedexShipmentLabelView.as_view()(cross_company_request, label_id=label.id)
+        self.assertEqual(denied.status_code, 404)
+
+    def test_only_company_admin_can_resolve_uncertain_shipment(self):
+        shipment = FedexShipment.objects.create(
+            company=self.company,
+            cb_number="S123456789",
+            created_by=self.user,
+            status=FedexShipment.Status.UNCERTAIN,
+            ship_date=date(2026, 11, 18),
+            service_type="FEDEX_2_DAY",
+            pickup_type="DROPOFF_AT_FEDEX_LOCATION",
+            shipment_data={},
+        )
+        payload = {
+            "action": "confirm_not_created",
+            "note": "Verificado en la cuenta de FedEx.",
+        }
+        request = APIRequestFactory().post(
+            f"/api/integrations/fedex/shipments/{shipment.id}/resolve/",
+            payload,
+            format="json",
+            **self.headers,
+        )
+        force_authenticate(request, user=self.user)
+        self.assertEqual(
+            FedexShipmentResolveView.as_view()(request, shipment_id=shipment.id).status_code,
+            403,
+        )
+
+        Membership.objects.filter(user=self.user, company=self.company).update(
+            role=Role.ADMIN_COMPANY
+        )
+        admin_request = APIRequestFactory().post(
+            f"/api/integrations/fedex/shipments/{shipment.id}/resolve/",
+            payload,
+            format="json",
+            **self.headers,
+        )
+        force_authenticate(admin_request, user=self.user)
+        response = FedexShipmentResolveView.as_view()(
+            admin_request, shipment_id=shipment.id
+        )
+        self.assertEqual(response.status_code, 200)
+        shipment.refresh_from_db()
+        self.assertEqual(shipment.status, FedexShipment.Status.FAILED)
+        self.assertEqual(shipment.resolved_by, self.user)
+        self.assertTrue(shipment.resolved_at)
+
+    def test_processing_cannot_be_resolved_while_creation_may_still_be_running(self):
+        Membership.objects.filter(user=self.user, company=self.company).update(
+            role=Role.ADMIN_COMPANY
+        )
+        shipment = FedexShipment.objects.create(
+            company=self.company,
+            cb_number="S123456789",
+            created_by=self.user,
+            status=FedexShipment.Status.PROCESSING,
+            ship_date=date(2026, 11, 18),
+            service_type="FEDEX_2_DAY",
+            pickup_type="DROPOFF_AT_FEDEX_LOCATION",
+            shipment_data={},
+        )
+        request = APIRequestFactory().post(
+            f"/api/integrations/fedex/shipments/{shipment.id}/resolve/",
+            {"action": "confirm_not_created", "note": "Revisado"},
+            format="json",
+            **self.headers,
+        )
+        force_authenticate(request, user=self.user)
+        response = FedexShipmentResolveView.as_view()(request, shipment_id=shipment.id)
+        self.assertEqual(response.status_code, 404)
+        shipment.refresh_from_db()
+        self.assertEqual(shipment.status, FedexShipment.Status.PROCESSING)
 
     @override_settings(
         FEDEX_SHIPMENT_CREATION_ENABLED=True,
@@ -213,19 +526,31 @@ class FedexShipmentTests(SimpleTestCase):
             "cb_number": "S123456789",
             "tracking_number": "123456789012",
             "recipient_email": "requestor@example.com",
-            "labels": [
-                {
-                    "file_name": "client-supplied-name.pdf",
-                    "content_base64": base64.b64encode(b"%PDF-1.4 test").decode(),
-                }
-            ],
         }
+        shipment = FedexShipment.objects.create(
+            company=self.company,
+            cb_number=payload["cb_number"],
+            created_by=self.user,
+            status=FedexShipment.Status.CREATED,
+            ship_date=date(2026, 11, 18),
+            service_type="FEDEX_2_DAY",
+            pickup_type="DROPOFF_AT_FEDEX_LOCATION",
+            tracking_number=payload["tracking_number"],
+            tracking_numbers=[payload["tracking_number"]],
+            shipment_data={},
+        )
+        FedexShipmentLabel.objects.create(
+            shipment=shipment,
+            file_name="S123456789-fedex-label-1.pdf",
+            content=b"%PDF-1.4 test",
+        )
         request = APIRequestFactory().post(
             "/api/integrations/fedex/shipments/email/",
             payload,
             format="json",
+            **self.headers,
         )
-        force_authenticate(request, user=SimpleNamespace(is_authenticated=True))
+        force_authenticate(request, user=self.user)
 
         response = FedexEmailShipmentView.as_view()(request)
 
@@ -238,9 +563,9 @@ class FedexShipmentTests(SimpleTestCase):
     @patch("integrations.views.FedexClient.create_shipment")
     def test_creation_is_disabled_for_review(self, create_shipment):
         request = APIRequestFactory().post(
-            "/api/integrations/fedex/shipments/", {}, format="json"
+            "/api/integrations/fedex/shipments/", {}, format="json", **self.headers
         )
-        force_authenticate(request, user=SimpleNamespace(is_authenticated=True))
+        force_authenticate(request, user=self.user)
 
         response = FedexCreateShipmentView.as_view()(request)
 
@@ -251,9 +576,9 @@ class FedexShipmentTests(SimpleTestCase):
     @patch("integrations.views.EmailMessage.send")
     def test_email_is_disabled_for_review(self, send):
         request = APIRequestFactory().post(
-            "/api/integrations/fedex/shipments/email/", {}, format="json"
+            "/api/integrations/fedex/shipments/email/", {}, format="json", **self.headers
         )
-        force_authenticate(request, user=SimpleNamespace(is_authenticated=True))
+        force_authenticate(request, user=self.user)
 
         response = FedexEmailShipmentView.as_view()(request)
 

@@ -27,14 +27,29 @@ by FedEx. Cargobase dimensions in centimetres are converted to the nearest whole
 inch (minimum one inch); operators must verify the result. The fixed packaging
 type `YOUR_PACKAGING` is only appropriate for customer-provided packaging.
 
-Run `python manage.py migrate` to create the FedEx address and notification
-preference tables. Saved addresses are shared within the active company, and
-notification preferences are stored per company and CB. Both require an active
-company membership with price-view permission. Preferences do not enable or
-send FedEx notifications; label email remains a separate manual action.
+Run `python manage.py migrate` to create the FedEx address, notification
+preference, shipment, and label tables. Saved addresses are shared within the
+active company, and notification preferences are stored per company and CB.
+Both require an active company membership with price-view permission.
+Preferences do not enable or send FedEx notifications.
+
+Shipment creation remains disabled unless `FEDEX_SHIPMENT_CREATION_ENABLED` is
+explicitly enabled, and the backend independently rejects creation unless
+`FEDEX_BASE_URL` is exactly `https://apis-sandbox.fedex.com`. The initial flow
+accepts only US-to-US shipments with `DROPOFF_AT_FEDEX_LOCATION`; it does not
+schedule a pickup. A CB can have only one active, created, or unresolved FedEx
+shipment per company. Definite FedEx rejections can be retried; timeouts and
+ambiguous outcomes remain blocked until an authorized company administrator
+verifies them in FedEx and records the resolution. Billing account numbers are
+never stored in the shipment snapshot. Labels are validated as PDFs, stored in
+the database, and served only to authorized members of the shipment's company.
+An attempt stuck in `processing` cannot be resolved through the interface:
+first investigate whether the request is still running and verify the outcome
+with FedEx before carrying out any manual recovery.
 
 Sending the label by email is a separate, user-confirmed action after shipment
-creation. Configure the backend SMTP sender with `EMAIL_HOST`, `EMAIL_PORT`,
+creation; the backend attaches the stored label, not a file supplied by the
+browser. Configure the backend SMTP sender with `EMAIL_HOST`, `EMAIL_PORT`,
 `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, and
 `DEFAULT_FROM_EMAIL`. For Gmail, use a mailbox app password rather than its
 normal sign-in password. Do not put these credentials in frontend or

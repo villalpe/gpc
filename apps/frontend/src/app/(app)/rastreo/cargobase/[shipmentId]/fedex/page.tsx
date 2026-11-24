@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Download, Mail, PackageCheck, Plus, Trash2 } from "lucide-react";
 import {
   fedexDraftFromCargobase,
+  fedexDomesticShipmentPayload,
   fedexRateQuoteKey,
   isInternationalFedexDraft,
   type FedexDraft,
@@ -19,9 +20,11 @@ import FedexSavedAddresses from "@/components/tracking/FedexSavedAddresses";
 import FedexNotificationPreferences from "@/components/tracking/FedexNotificationPreferences";
 
 type CreatedShipment = {
+  id: number;
+  status: "processing" | "created" | "uncertain" | "failed";
   tracking_number: string;
   tracking_numbers: string[];
-  labels: { file_name: string; content_base64: string }[];
+  labels: { id: number; file_name: string }[];
   warning?: string;
 };
 
@@ -189,16 +192,6 @@ function PartyFields({
   );
 }
 
-function downloadPdf(base64: string, fileName: string) {
-  const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
-  const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
-
 async function responseError(response: Response) {
   const data = await response.json().catch(() => ({}));
   if (typeof data.detail === "string") return data.detail;
@@ -218,6 +211,7 @@ export default function FedexShipmentReviewPage() {
   const [notice, setNotice] = useState("");
   const [created, setCreated] = useState<CreatedShipment | null>(null);
   const [emailSent, setEmailSent] = useState(false);
+  const [confirmSandbox, setConfirmSandbox] = useState(false);
   const [selectedRate, setSelectedRate] = useState<SelectedFedexRate | null>(null);
   const isInternational = useMemo(
     () => (draft ? isInternationalFedexDraft(draft) : false),
@@ -235,6 +229,11 @@ export default function FedexShipmentReviewPage() {
     selectedRate.quoteKey === fedexRateQuoteKey(draft)
     ? selectedRate
     : null;
+  const isDomesticUs = Boolean(
+    draft &&
+      draft.sender.country_code.toUpperCase() === "US" &&
+      draft.recipient.country_code.toUpperCase() === "US"
+  );
 
   useEffect(() => {
     let active = true;
@@ -389,6 +388,10 @@ export default function FedexShipmentReviewPage() {
   async function createShipment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!draft) return;
+    if (!isDomesticUs) {
+      setError("En esta primera etapa solo se pueden crear envíos domésticos dentro de Estados Unidos.");
+      return;
+    }
     setCreating(true);
     setError("");
     setNotice("");
@@ -397,12 +400,27 @@ export default function FedexShipmentReviewPage() {
       const response = await fetch("/api/fedex/shipments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(draft),
+        body: JSON.stringify(fedexDomesticShipmentPayload(draft)),
       });
-      if (!response.ok) throw new Error(await responseError(response));
-      const data = (await response.json()) as CreatedShipment;
-      setCreated(data);
-      setNotice("FedEx creó el envío. Revisa la guía y la etiqueta antes de enviar el correo.");
+      const data = (await response.json().catch(() => ({}))) as {
+      detail?: string;
+      shipment?: CreatedShipment;
+      } & Partial<CreatedShipment>;
+      if (!response.ok) {
+      if (data.shipment?.status === "uncertain" || data.shipment?.status === "processing") {
+        setCreated(data.shipment);
+        setError(data.detail || "No se pudo confirmar el resultado. No vuelvas a crear el envío.");
+        return;
+      }
+      throw new Error(data.detail || "No se pudo crear el envío en FedEx.");
+      }
+      const shipment = data as CreatedShipment;
+      setCreated(shipment);
+      setNotice(
+      shipment.status === "created"
+        ? "FedEx creó el envío. Revisa la guía y la etiqueta antes de enviar el correo."
+        : "La respuesta de FedEx requiere verificación. El CB quedó bloqueado para evitar duplicados."
+      );
     } catch (reason) {
       setError(
         reason instanceof Error ? reason.message : "No se pudo crear el envío en FedEx."
@@ -426,7 +444,6 @@ export default function FedexShipmentReviewPage() {
           cb_number: draft.cb_number,
           tracking_number: created.tracking_number,
           recipient_email: draft.recipient_email,
-          labels: created.labels,
         }),
       });
       if (!response.ok) throw new Error(await responseError(response));
@@ -492,23 +509,25 @@ export default function FedexShipmentReviewPage() {
       {created ? (
         <section className={card}>
           <div className="flex items-center gap-3">
-            <PackageCheck className="h-6 w-6 text-emerald-600" />
+            <PackageCheck className={`h-6 w-6 ${created.status === "created" ? "text-emerald-600" : "text-amber-600"}`} />
             <div>
-              <h2 className="text-lg font-semibold">Envío creado en FedEx</h2>
+              <h2 className="text-lg font-semibold">
+                {created.status === "created" ? "Envío creado en FedEx" : "Resultado pendiente de verificar"}
+              </h2>
               <p className="text-sm text-slate-600 dark:text-white/70">Guía: <strong>{created.tracking_number || "Revisar respuesta de FedEx"}</strong></p>
             </div>
           </div>
           {created.warning && <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{created.warning}</p>}
           <div className="mt-4 flex flex-wrap gap-3">
             {created.labels.map((label, index) => (
-              <button
-                type="button"
+              <a
                 key={`${label.file_name}-${index}`}
-                onClick={() => downloadPdf(label.content_base64, label.file_name)}
+                href={`/api/fedex/shipments/labels/${label.id}`}
+                download={label.file_name}
                 className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold dark:border-white/20"
               >
                 <Download className="h-4 w-4" /> Descargar etiqueta {index + 1}
-              </button>
+              </a>
             ))}
           </div>
           <div className="mt-6 grid gap-3 sm:grid-cols-[1fr_auto]">
@@ -522,7 +541,7 @@ export default function FedexShipmentReviewPage() {
             <button
               type="button"
               onClick={sendEmail}
-              disabled={sending || emailSent || !draft.recipient_email || !created.tracking_number || !created.labels.length}
+              disabled={sending || emailSent || created.status !== "created" || !draft.recipient_email || !created.tracking_number || !created.labels.length}
               className="mt-auto inline-flex items-center justify-center gap-2 rounded-lg bg-[#C1374A] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
             >
               <Mail className="h-4 w-4" /> {sending ? "Enviando..." : emailSent ? "Correo enviado" : "Enviar correo con guía"}
@@ -557,7 +576,13 @@ export default function FedexShipmentReviewPage() {
                   Opciones de referencia, no una consulta de disponibilidad. FedEx debe confirmar el servicio para la ruta, paquete y cuenta.
                 </span>
               </label>
-              <SelectField title="Entrega o recolección" value={draft.pickup_type} onChange={(value) => setDraft({ ...draft, pickup_type: value })} required options={["DROPOFF_AT_FEDEX_LOCATION", "CONTACT_FEDEX_TO_SCHEDULE", "USE_SCHEDULED_PICKUP"]} />
+              <label className={label}>
+                Entrega del paquete
+                <input className={input} value="Dejar en una ubicación FedEx" readOnly />
+                <span className="mt-1 block text-xs font-normal text-slate-500 dark:text-white/60">
+                  La creación automática de recolecciones queda deshabilitada en esta etapa.
+                </span>
+              </label>
               <label className={label}>Tipo de empaque FedEx
                 <input className={input} value="YOUR_PACKAGING" readOnly />
                 <span className="mt-1 block text-xs font-normal text-slate-500">Solo para empaque propio.</span>
@@ -709,8 +734,23 @@ export default function FedexShipmentReviewPage() {
             onRequesterEmailChange={updateRequesterEmail}
           />
 
+          {!isDomesticUs && (
+            <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              La creación de guías está habilitada por ahora solo para envíos domésticos US→US.
+            </p>
+          )}
+          <label className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+            <input
+              type="checkbox"
+              checked={confirmSandbox}
+              onChange={(event) => setConfirmSandbox(event.target.checked)}
+              required
+              className="mt-0.5 h-4 w-4 accent-[#C1374A]"
+            />
+            <span>Confirmo que esta solicitud creará una guía FedEx en el entorno sandbox y que revisaré su resultado antes de repetirla.</span>
+          </label>
           <div className="flex justify-end">
-            <button type="submit" disabled={creating} className="inline-flex items-center gap-2 rounded-xl bg-[#C1374A] px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">
+            <button type="submit" disabled={creating || !confirmSandbox || !isDomesticUs} className="inline-flex items-center gap-2 rounded-xl bg-[#C1374A] px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">
               <PackageCheck className="h-4 w-4" /> {creating ? "Creando guía en sandbox..." : "Crear guía FedEx"}
             </button>
           </div>

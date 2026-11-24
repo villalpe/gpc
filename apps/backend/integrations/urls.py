@@ -6,6 +6,8 @@ from .views import (
     FedexNotificationPreferencesView,
     FedexRatesView,
     FedexSavedAddressesView,
+    FedexShipmentLabelView,
+    FedexShipmentResolveView,
     FedexTrackView,
     SkydropxShipmentsView,
 )
@@ -21,5 +23,15 @@ urlpatterns = [
     ),
     path("fedex/shipments/", FedexCreateShipmentView.as_view(), name="fedex-create-shipment"),
     path("fedex/shipments/email/", FedexEmailShipmentView.as_view(), name="fedex-email-shipment"),
+    path(
+        "fedex/shipments/labels/<int:label_id>/",
+        FedexShipmentLabelView.as_view(),
+        name="fedex-shipment-label",
+    ),
+    path(
+        "fedex/shipments/<int:shipment_id>/resolve/",
+        FedexShipmentResolveView.as_view(),
+        name="fedex-shipment-resolve",
+    ),
     path("skydropx/shipments/", SkydropxShipmentsView.as_view(), name="skydropx-shipments"),
 ]

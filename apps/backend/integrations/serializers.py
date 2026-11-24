@@ -238,11 +238,6 @@ class FedexEmailShipmentSerializer(serializers.Serializer):
     cb_number = serializers.RegexField(r"^S\d{9}$")
     tracking_number = serializers.CharField(max_length=40)
     recipient_email = serializers.EmailField()
-    labels = serializers.ListField(
-        child=serializers.DictField(),
-        min_length=1,
-        max_length=40,
-    )
 
 
 class SkydropxTrackRequestSerializer(serializers.Serializer):

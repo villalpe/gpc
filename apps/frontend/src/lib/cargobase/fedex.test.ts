@@ -2,11 +2,34 @@ import { describe, expect, it } from "vitest";
 import {
   fedexRateQuoteKey,
   fedexDraftFromCargobase,
+  fedexDomesticShipmentPayload,
   isInternationalFedexDraft,
 } from "./fedex";
 import { fedexRoute, fedexServices } from "./fedex-services";
 
 describe("Cargobase to FedEx draft mapping", () => {
+  it("omits customs fields when serializing a domestic shipment", () => {
+    const draft = fedexDraftFromCargobase({
+      organization: { good_items: [
+        { units: 2, weight: 5, w_unit: "lb", length: 10, width: 8, height: 4, m_unit: "in" },
+        { units: 1, weight: 3, w_unit: "lb", length: 6, width: 5, height: 4, m_unit: "in" },
+      ] },
+      schedule: { pickup_country_code: "US", stop1_country_code: "US" },
+    }, "S123456789");
+    const payload = JSON.parse(JSON.stringify(fedexDomesticShipmentPayload(draft)));
+
+    expect(draft.packages[0].customs_items).toHaveLength(1);
+    expect(payload).not.toHaveProperty("duties_payment_type");
+    expect(payload).not.toHaveProperty("duties_account_number");
+    expect(payload.pickup_type).toBe("DROPOFF_AT_FEDEX_LOCATION");
+    expect(payload.packages).toHaveLength(2);
+    for (const [index, item] of payload.packages.entries()) {
+      expect(item).not.toHaveProperty("customs_items");
+      expect(item.quantity).toBe(draft.packages[index].quantity);
+      expect(item.weight).toBe(draft.packages[index].weight);
+    }
+  });
+
   it("maps parties, package measurements, customs data, and requester email", () => {
     const draft = fedexDraftFromCargobase(
       {

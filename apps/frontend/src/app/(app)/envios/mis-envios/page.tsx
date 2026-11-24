@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -52,6 +52,27 @@ type Shipment = {
   notes: string;
   created_at: string;
   label_url?: string | null;
+};
+
+type FedexHistoryShipment = {
+  id: number;
+  cb_number: string;
+  status: "processing" | "created" | "uncertain" | "failed";
+  status_label: string;
+  ship_date: string;
+  created_at: string;
+  service_type: string;
+  tracking_number: string;
+  tracking_numbers: string[];
+  package_count: number;
+  origin: { city: string; state: string };
+  destination: { city: string; state: string };
+  labels: { id: number; file_name: string }[];
+  warning: string;
+  error_detail: string;
+  resolution_note: string;
+  resolved_by_email: string;
+  resolved_at: string | null;
 };
 
 const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
@@ -106,8 +127,12 @@ export default function MisEnviosPage() {
   const [error, setError] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [openId, setOpenId] = useState<number | null>(null);
+  const [fedexShipments, setFedexShipments] = useState<FedexHistoryShipment[]>([]);
+  const [fedexLoading, setFedexLoading] = useState(true);
+  const [fedexError, setFedexError] = useState("");
+  const [canResolveFedex, setCanResolveFedex] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
@@ -123,12 +148,72 @@ export default function MisEnviosPage() {
     } finally {
       setLoading(false);
     }
+  }, [statusFilter]);
+
+  const loadFedex = useCallback(async () => {
+    setFedexLoading(true);
+    setFedexError("");
+    try {
+      const response = await fetch("/api/fedex/shipments", { cache: "no-store" });
+      const data = (await response.json().catch(() => null)) as
+        | { shipments?: FedexHistoryShipment[]; can_resolve?: boolean; detail?: string }
+        | null;
+      if (!response.ok) {
+        throw new Error(data?.detail || "No se pudo cargar el historial FedEx.");
+      }
+      setFedexShipments(data?.shipments ?? []);
+      setCanResolveFedex(data?.can_resolve ?? false);
+    } catch (reason) {
+      setFedexError(reason instanceof Error ? reason.message : "No se pudo cargar el historial FedEx.");
+    } finally {
+      setFedexLoading(false);
+    }
+  }, []);
+
+  async function resolveFedexShipment(
+    shipment: FedexHistoryShipment,
+    action: "confirm_created" | "confirm_not_created"
+  ) {
+    const trackingNumber =
+      action === "confirm_created"
+        ? window.prompt("Ingresa el número de rastreo confirmado en FedEx:")
+        : undefined;
+    if (action === "confirm_created" && !trackingNumber) return;
+    const verified = window.confirm(
+      action === "confirm_created"
+        ? "Confirma que verificaste en FedEx que el envío ya fue creado."
+        : "Confirma que verificaste en FedEx que el envío NO fue creado."
+    );
+    if (!verified) return;
+    const note = window.prompt("Agrega una nota de verificación para la auditoría:");
+    if (!note?.trim()) return;
+
+    try {
+      const response = await fetch(`/api/fedex/shipments/${shipment.id}/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, tracking_number: trackingNumber, note }),
+      });
+      const data = (await response.json().catch(() => null)) as { detail?: string } | null;
+      if (!response.ok) throw new Error(data?.detail || "No se pudo resolver el envío.");
+      await loadFedex();
+    } catch (reason) {
+      setFedexError(reason instanceof Error ? reason.message : "No se pudo resolver el envío.");
+    }
   }
 
   useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter]);
+    let active = true;
+    queueMicrotask(() => {
+      if (active) {
+        void load();
+        void loadFedex();
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [load, loadFedex]);
 
   return (
     <main className="min-h-screen bg-slate-100 p-4 text-slate-900 dark:bg-[#030712] dark:text-white sm:p-6 lg:p-8">
@@ -157,7 +242,10 @@ export default function MisEnviosPage() {
             </select>
             <button
               type="button"
-              onClick={() => void load()}
+              onClick={() => {
+                void load();
+                void loadFedex();
+              }}
               disabled={loading}
               className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50 dark:border-white/20 dark:bg-white/10 dark:hover:bg-white/15"
             >
@@ -367,6 +455,134 @@ export default function MisEnviosPage() {
             </tbody>
           </table>
         </div>
+
+        <section className="space-y-3 rounded-2xl border border-slate-300 bg-white p-4 shadow-md dark:border-white/15 dark:bg-white/[0.06] sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-xl font-bold">Envíos FedEx</h2>
+              <p className="text-sm text-slate-600 dark:text-white/70">
+                Historial de guías creadas desde Cargobase, separado de los envíos cotizados.
+              </p>
+            </div>
+            <span className="text-sm text-slate-500 dark:text-white/60">
+              {fedexShipments.length} {fedexShipments.length === 1 ? "registro" : "registros"}
+            </span>
+          </div>
+
+          {fedexError && (
+            <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-500/10 dark:text-rose-200">
+              {fedexError}
+            </p>
+          )}
+          {fedexLoading && fedexShipments.length === 0 && (
+            <p className="py-4 text-sm text-slate-500 dark:text-white/60">Cargando historial FedEx...</p>
+          )}
+          {!fedexLoading && fedexShipments.length === 0 && !fedexError && (
+            <p className="py-4 text-sm text-slate-500 dark:text-white/60">Aún no hay guías FedEx registradas.</p>
+          )}
+
+          {fedexShipments.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px] text-left text-sm">
+                <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500 dark:border-white/10 dark:text-white/60">
+                  <tr>
+                    <th className="px-3 py-3">CB / Fecha</th>
+                    <th className="px-3 py-3">Servicio</th>
+                    <th className="px-3 py-3">Origen → Destino</th>
+                    <th className="px-3 py-3">Guía</th>
+                    <th className="px-3 py-3">Estatus</th>
+                    <th className="px-3 py-3">Etiquetas</th>
+                    {canResolveFedex && <th className="px-3 py-3">Revisión admin.</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-white/10">
+                  {fedexShipments.map((shipment) => (
+                    <tr key={shipment.id}>
+                      <td className="px-3 py-3">
+                        <strong>{shipment.cb_number}</strong>
+                        <p className="text-xs text-slate-500 dark:text-white/60">{formatDate(shipment.created_at)}</p>
+                      </td>
+                      <td className="px-3 py-3">
+                        {shipment.service_type}
+                        <p className="text-xs text-slate-500 dark:text-white/60">
+                          {shipment.package_count} paquete(s)
+                        </p>
+                      </td>
+                      <td className="px-3 py-3">
+                        {[shipment.origin, shipment.destination]
+                          .map((place) => [place.city, place.state].filter(Boolean).join(", "))
+                          .join(" → ")}
+                      </td>
+                      <td className="px-3 py-3 font-mono">{shipment.tracking_number || "Por verificar"}</td>
+                      <td className="px-3 py-3">
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                          shipment.status === "created"
+                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200"
+                            : shipment.status === "failed"
+                              ? "bg-rose-100 text-rose-800 dark:bg-rose-500/15 dark:text-rose-200"
+                              : "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200"
+                        }`}>
+                          {shipment.status_label}
+                        </span>
+                        {(shipment.warning || shipment.error_detail) && (
+                          <p className="mt-2 max-w-xs text-xs text-amber-800 dark:text-amber-200">
+                            {shipment.warning || shipment.error_detail}
+                          </p>
+                        )}
+                        {shipment.resolution_note && (
+                          <p className="mt-1 max-w-xs text-xs text-slate-500 dark:text-white/60">
+                            Verificación: {shipment.resolution_note}
+                            {shipment.resolved_by_email && ` · ${shipment.resolved_by_email}`}
+                            {shipment.resolved_at && ` · ${formatDate(shipment.resolved_at)}`}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex flex-wrap gap-2">
+                          {shipment.labels.map((label, index) => (
+                            <a
+                              key={label.id}
+                              href={`/api/fedex/shipments/labels/${label.id}`}
+                              download={label.file_name}
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-[#C1374A] dark:border-white/20"
+                            >
+                              <Download className="h-3.5 w-3.5" /> Etiqueta {index + 1}
+                            </a>
+                          ))}
+                          {shipment.labels.length === 0 && <span className="text-xs text-slate-400">No disponible</span>}
+                        </div>
+                      </td>
+                      {canResolveFedex && (
+                        <td className="px-3 py-3">
+                          {shipment.status === "uncertain" ? (
+                            <div className="flex flex-col items-start gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void resolveFedexShipment(shipment, "confirm_created")}
+                                className="text-xs font-semibold text-emerald-700 underline dark:text-emerald-300"
+                              >
+                                Confirmar creado
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void resolveFedexShipment(shipment, "confirm_not_created")}
+                                className="text-xs font-semibold text-rose-700 underline dark:text-rose-300"
+                              >
+                                Confirmar no creado
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-400">-</span>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       </div>
     </main>
   );

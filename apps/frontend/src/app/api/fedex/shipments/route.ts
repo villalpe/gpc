@@ -1,5 +1,19 @@
 import { NextResponse } from "next/server";
-import { backendPost } from "@/lib/backend-proxy";
+import { backendGet, backendPost } from "@/lib/backend-proxy";
+
+export async function GET() {
+  try {
+    const upstream = await backendGet("/integrations/fedex/shipments/");
+    const data = await upstream.json().catch(() => ({}));
+    return NextResponse.json(data, { status: upstream.status });
+  } catch (error) {
+    console.error("GET /api/fedex/shipments error:", error);
+    return NextResponse.json(
+      { detail: "No se pudo cargar el historial de envíos FedEx." },
+      { status: 500 }
+    );
+  }
+}
 
 export async function POST(request: Request) {
   try {

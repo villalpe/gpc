@@ -1,5 +1,6 @@
 import base64
 import binascii
+import json
 import logging
 import re
 import smtplib
@@ -7,16 +8,28 @@ import smtplib
 import requests
 from django.conf import settings
 from django.core.mail import EmailMessage
+from django.core.serializers.json import DjangoJSONEncoder
+from django.db import IntegrityError, transaction
+from django.http import HttpResponse
+from django.utils import timezone
 from rest_framework import status
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.models import Role
 from accounts.permission_service import can_view_price
-from accounts.permissions import CanAccessQuotes
+from accounts.permissions import CanAccessQuotes, user_role_for_company
+from companies.models import Company
 from core.company_context import get_active_company_id
 
-from .models import FedexNotificationPreferences, FedexSavedAddress
+from .models import (
+    FedexNotificationPreferences,
+    FedexSavedAddress,
+    FedexShipment,
+    FedexShipmentLabel,
+)
 from .providers.fedex.client import FedexClient
 from .providers.fedex.mappers import (
     build_fedex_shipment_request,
@@ -183,7 +196,64 @@ class FedexTrackView(APIView):
 
 
 class FedexCreateShipmentView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanAccessQuotes]
+
+    @staticmethod
+    def _company_and_role(request):
+        company_id = get_active_company_id(request)
+        role = user_role_for_company(request.user, company_id)
+        if not role or not Company.objects.filter(pk=company_id, is_active=True).exists():
+            raise PermissionDenied(
+                "Debes pertenecer a una empresa activa para crear guías FedEx."
+            )
+        return company_id, role
+
+    @staticmethod
+    def _shipment_response(shipment):
+        return {
+            "id": shipment.id,
+            "cb_number": shipment.cb_number,
+            "status": shipment.status,
+            "ship_date": shipment.ship_date.isoformat(),
+            "service_type": shipment.service_type,
+            "tracking_number": shipment.tracking_number,
+            "tracking_numbers": shipment.tracking_numbers,
+            "labels": [
+                {"id": label.id, "file_name": label.file_name}
+                for label in shipment.labels.all()
+            ],
+            "warning": shipment.warning,
+        }
+
+    @staticmethod
+    def _sanitize_snapshot(data):
+        snapshot = {
+            key: value
+            for key, value in data.items()
+            if key not in {"payment_account_number", "duties_account_number"}
+        }
+        return json.loads(json.dumps(snapshot, cls=DjangoJSONEncoder))
+
+    @staticmethod
+    def _mark_uncertain(shipment, detail, mapped=None):
+        shipment.status = FedexShipment.Status.UNCERTAIN
+        shipment.error_detail = detail[:500]
+        if mapped:
+            shipment.tracking_number = mapped["tracking_number"]
+            shipment.tracking_numbers = mapped["tracking_numbers"]
+            shipment.warning = mapped["warning"] or detail
+        else:
+            shipment.warning = detail
+        shipment.save(
+            update_fields=[
+                "status",
+                "error_detail",
+                "tracking_number",
+                "tracking_numbers",
+                "warning",
+                "updated_at",
+            ]
+        )
 
     def post(self, request):
         if not settings.FEDEX_SHIPMENT_CREATION_ENABLED:
@@ -192,8 +262,37 @@ class FedexCreateShipmentView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
+        company_id, role = self._company_and_role(request)
+        if role not in {Role.SUPERADMIN, Role.ADMIN_COMPANY, Role.OPERATOR}:
+            raise PermissionDenied("No tienes permiso para crear guías FedEx.")
+
         serializer = FedexCreateShipmentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        if (
+            data["sender"]["country_code"].upper() != "US"
+            or data["recipient"]["country_code"].upper() != "US"
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "La creación de guías solo está habilitada para envíos "
+                        "domésticos US→US."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if data["pickup_type"] != "DROPOFF_AT_FEDEX_LOCATION":
+            return Response(
+                {
+                    "detail": (
+                        "En esta etapa solo se permite dejar el paquete en una "
+                        "ubicación FedEx."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if not settings.FEDEX_ACCOUNT_NUMBER:
             return Response(
@@ -209,72 +308,371 @@ class FedexCreateShipmentView(APIView):
                 {"detail": "Faltan las credenciales o la URL de FedEx en el backend."},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
+        if settings.FEDEX_BASE_URL.rstrip("/") != "https://apis-sandbox.fedex.com":
+            return Response(
+                {"detail": "La creación de guías está restringida al sandbox de FedEx."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        payload = build_fedex_shipment_request(data, settings.FEDEX_ACCOUNT_NUMBER)
+        try:
+            with transaction.atomic():
+                shipment = FedexShipment.objects.create(
+                    company_id=company_id,
+                    cb_number=data["cb_number"],
+                    created_by=request.user,
+                    status=FedexShipment.Status.PROCESSING,
+                    ship_date=data["ship_date"],
+                    service_type=data["service_type"],
+                    pickup_type=data["pickup_type"],
+                    shipment_data=self._sanitize_snapshot(data),
+                )
+        except IntegrityError:
+            existing = FedexShipment.objects.filter(
+                company_id=company_id,
+                cb_number=data["cb_number"],
+                status__in=[
+                    FedexShipment.Status.PROCESSING,
+                    FedexShipment.Status.CREATED,
+                    FedexShipment.Status.UNCERTAIN,
+                ],
+            ).first()
+            if existing is None:
+                raise
+            return Response(
+                {
+                    "detail": (
+                        f"El CB {data['cb_number']} ya tiene un envío FedEx "
+                        f"con estado «{existing.get_status_display()}». "
+                        "No se enviará otra solicitud."
+                    ),
+                    "shipment": self._shipment_response(existing),
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
 
         try:
-            payload = build_fedex_shipment_request(
-                serializer.validated_data,
-                settings.FEDEX_ACCOUNT_NUMBER,
-            )
             raw = FedexClient().create_shipment(payload)
-            return Response(
-                map_fedex_shipment(raw, serializer.validated_data["cb_number"]),
-                status=status.HTTP_201_CREATED,
-            )
         except requests.HTTPError as error:
             upstream = error.response
-            details = []
+            codes = []
             if upstream is not None:
                 try:
-                    details = [
-                        item.get("message") or item.get("code")
+                    codes = [
+                        item["code"]
                         for item in upstream.json().get("errors", [])
                         if isinstance(item, dict)
+                        and isinstance(item.get("code"), str)
+                        and re.fullmatch(r"[A-Za-z0-9._-]{1,100}", item["code"])
                     ]
-                except (ValueError, AttributeError):
-                    details = []
-            upstream_status = upstream.status_code if upstream else "unknown"
+                except (ValueError, AttributeError, TypeError):
+                    logger.warning("FedEx returned an invalid shipment rejection body.")
+            upstream_status = upstream.status_code if upstream is not None else "unknown"
             logger.warning("FedEx shipment creation failed: %s", upstream_status)
+            if upstream is not None and upstream.status_code in {400, 422} and codes:
+                shipment.status = FedexShipment.Status.FAILED
+                shipment.error_detail = "FedEx rechazó la solicitud."
+                shipment.save(update_fields=["status", "error_detail", "updated_at"])
+            else:
+                detail = (
+                    "FedEx no confirmó el resultado de la solicitud. Verifica si "
+                    "creó el envío antes de resolver el bloqueo del CB."
+                )
+                self._mark_uncertain(shipment, detail)
             return Response(
-                {"detail": "; ".join(details) or "FedEx rechazó la solicitud de envío."},
-                status=status.HTTP_502_BAD_GATEWAY,
+                {
+                    "detail": (
+                        "FedEx rechazó la solicitud de envío."
+                        if shipment.status == FedexShipment.Status.FAILED
+                        else "FedEx no confirmó el resultado de la solicitud."
+                    ),
+                    "codes": codes,
+                    "shipment": self._shipment_response(shipment),
+                },
+                status=(
+                    status.HTTP_502_BAD_GATEWAY
+                    if shipment.status == FedexShipment.Status.UNCERTAIN
+                    else status.HTTP_400_BAD_REQUEST
+                ),
             )
         except requests.Timeout:
             logger.exception("FedEx shipment creation timed out")
+            detail = (
+                "FedEx no confirmó la respuesta. Verifica si creó el envío antes "
+                "de resolver el bloqueo del CB."
+            )
+            self._mark_uncertain(shipment, detail)
             return Response(
-                {
-                    "detail": (
-                        "FedEx no confirmó la respuesta. Verifica si creó el envío "
-                        "antes de volver a intentarlo."
-                    )
-                },
+                {"detail": detail, "shipment": self._shipment_response(shipment)},
                 status=status.HTTP_504_GATEWAY_TIMEOUT,
             )
         except requests.RequestException:
-            logger.exception("FedEx shipment creation error")
+            logger.exception("FedEx shipment creation had an ambiguous network error")
+            detail = (
+                "No se pudo confirmar la creación en FedEx. Verifica si existe "
+                "antes de resolver el bloqueo del CB."
+            )
+            self._mark_uncertain(shipment, detail)
             return Response(
-                {
-                    "detail": (
-                        "No se pudo confirmar la creación en FedEx. Verifica si el "
-                        "envío existe antes de volver a intentarlo."
-                    )
-                },
+                {"detail": detail, "shipment": self._shipment_response(shipment)},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
-        except (ValueError, KeyError):
+        except (ValueError, KeyError, TypeError, AttributeError):
             logger.exception("FedEx shipment response could not be mapped")
+            detail = (
+                "FedEx respondió de forma inesperada. Verifica si creó el envío "
+                "antes de resolver el bloqueo del CB."
+            )
+            self._mark_uncertain(shipment, detail)
             return Response(
-                {
-                    "detail": (
-                        "FedEx respondió de forma inesperada. Verifica si el envío "
-                        "existe antes de volver a intentarlo."
-                    )
-                },
+                {"detail": detail, "shipment": self._shipment_response(shipment)},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
+
+        try:
+            mapped = map_fedex_shipment(raw, data["cb_number"])
+            tracking_numbers = [
+                value
+                for value in mapped["tracking_numbers"]
+                if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9]{1,40}", value)
+            ]
+            mapped["tracking_numbers"] = tracking_numbers
+            mapped["tracking_number"] = tracking_numbers[0] if tracking_numbers else ""
+            decoded_labels = []
+            total_size = 0
+            for index, label in enumerate(mapped["labels"], start=1):
+                encoded = label.get("content_base64")
+                if not isinstance(encoded, str) or len(encoded) > 14 * 1024 * 1024:
+                    raise ValueError("FedEx devolvió una etiqueta inválida.")
+                content = base64.b64decode(encoded, validate=True)
+                total_size += len(content)
+                if (
+                    len(content) > 10 * 1024 * 1024
+                    or total_size > 20 * 1024 * 1024
+                    or not content.startswith(b"%PDF-")
+                ):
+                    raise ValueError("FedEx devolvió una etiqueta PDF inválida o demasiado grande.")
+                decoded_labels.append(
+                    (f"{data['cb_number']}-fedex-label-{index}.pdf", content)
+                )
+        except (ValueError, KeyError, TypeError, AttributeError, binascii.Error):
+            logger.exception("FedEx accepted the request but its label response was invalid.")
+            mapped = locals().get("mapped")
+            detail = (
+                "FedEx recibió la solicitud, pero no se pudo validar la guía o sus "
+                "etiquetas. Verifica el resultado antes de resolver el bloqueo del CB."
+            )
+            self._mark_uncertain(shipment, detail, mapped)
+            return Response(
+                {"detail": detail, "shipment": self._shipment_response(shipment)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        shipment.tracking_numbers = tracking_numbers
+        shipment.tracking_number = tracking_numbers[0] if tracking_numbers else ""
+        shipment.warning = mapped["warning"]
+        shipment.fedex_transaction_id = str(
+            raw.get("transactionId") or raw.get("output", {}).get("transactionId") or ""
+        )[:100]
+        if not shipment.tracking_number or not decoded_labels:
+            shipment.status = FedexShipment.Status.UNCERTAIN
+            shipment.error_detail = (
+                "FedEx aceptó la solicitud, pero faltó una guía o etiqueta verificable."
+            )
+            shipment.warning = mapped["warning"] or shipment.error_detail
+        else:
+            shipment.status = FedexShipment.Status.CREATED
+
+        with transaction.atomic():
+            shipment.save()
+            FedexShipmentLabel.objects.bulk_create(
+                [
+                    FedexShipmentLabel(
+                        shipment=shipment,
+                        file_name=file_name,
+                        content=content,
+                    )
+                    for file_name, content in decoded_labels
+                ]
+            )
+        return Response(
+            self._shipment_response(shipment),
+            status=status.HTTP_201_CREATED,
+        )
+
+    def get(self, request):
+        company_id = get_active_company_id(request)
+        return Response(
+            FedexShipmentHistoryView.list_for_company(company_id, request.user)
+        )
+
+
+class FedexShipmentHistoryView(APIView):
+    permission_classes = [IsAuthenticated, CanAccessQuotes]
+
+    @staticmethod
+    def list_for_company(company_id, user):
+        shipments = (
+            FedexShipment.objects.filter(company_id=company_id)
+            .select_related("resolved_by")
+            .prefetch_related("labels")
+        )
+        results = []
+        for shipment in shipments:
+            snapshot = shipment.shipment_data
+            sender = snapshot.get("sender", {})
+            recipient = snapshot.get("recipient", {})
+            results.append(
+                {
+                    "id": shipment.id,
+                    "cb_number": shipment.cb_number,
+                    "status": shipment.status,
+                    "status_label": shipment.get_status_display(),
+                    "ship_date": shipment.ship_date.isoformat(),
+                    "created_at": shipment.created_at.isoformat(),
+                    "service_type": shipment.service_type,
+                    "tracking_number": shipment.tracking_number,
+                    "tracking_numbers": shipment.tracking_numbers,
+                    "package_count": sum(
+                        int(package.get("quantity", 0))
+                        for package in snapshot.get("packages", [])
+                    ),
+                    "pickup_type": shipment.pickup_type,
+                    "origin": {
+                        "city": sender.get("city", ""),
+                        "state": sender.get("state", ""),
+                    },
+                    "destination": {
+                        "city": recipient.get("city", ""),
+                        "state": recipient.get("state", ""),
+                    },
+                    "labels": [
+                        {"id": label.id, "file_name": label.file_name}
+                        for label in shipment.labels.all()
+                    ],
+                    "warning": shipment.warning,
+                    "error_detail": shipment.error_detail,
+                    "resolution_note": shipment.resolution_note,
+                    "resolved_by_email": (
+                        shipment.resolved_by.email if shipment.resolved_by else ""
+                    ),
+                    "resolved_at": (
+                        shipment.resolved_at.isoformat() if shipment.resolved_at else None
+                    ),
+                }
+            )
+        return {
+            "shipments": results,
+            "can_resolve": user_role_for_company(user, company_id)
+            in {Role.SUPERADMIN, Role.ADMIN_COMPANY},
+        }
+
+    def get(self, request):
+        company_id = get_active_company_id(request)
+        return Response(self.list_for_company(company_id, request.user))
+
+
+class FedexShipmentLabelView(APIView):
+    permission_classes = [IsAuthenticated, CanAccessQuotes]
+
+    def get(self, request, label_id):
+        company_id = get_active_company_id(request)
+        label = FedexShipmentLabel.objects.filter(
+            pk=label_id, shipment__company_id=company_id
+        ).first()
+        if label is None:
+            return Response({"detail": "No se encontró la etiqueta FedEx."}, status=404)
+        response = HttpResponse(bytes(label.content), content_type="application/pdf")
+        response["Content-Disposition"] = (
+            f'attachment; filename="{label.file_name}"'
+        )
+        response["X-Content-Type-Options"] = "nosniff"
+        return response
+
+
+class FedexShipmentResolveView(APIView):
+    permission_classes = [IsAuthenticated, CanAccessQuotes]
+
+    def post(self, request, shipment_id):
+        company_id = get_active_company_id(request)
+        role = user_role_for_company(request.user, company_id)
+        if role not in {Role.SUPERADMIN, Role.ADMIN_COMPANY}:
+            raise PermissionDenied("Solo un administrador de la empresa puede resolver el envío.")
+
+        shipment = FedexShipment.objects.filter(
+            pk=shipment_id,
+            company_id=company_id,
+            status=FedexShipment.Status.UNCERTAIN,
+        ).first()
+        if shipment is None:
+            return Response(
+                {"detail": "No se encontró un envío pendiente de resolución."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        action = request.data.get("action")
+        note = request.data.get("note")
+        if action not in {"confirm_created", "confirm_not_created"}:
+            return Response(
+                {"detail": "La acción debe ser confirm_created o confirm_not_created."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not isinstance(note, str) or not note.strip() or len(note.strip()) > 500:
+            return Response(
+                {"detail": "Agrega una nota de verificación (máximo 500 caracteres)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if action == "confirm_created":
+            tracking_number = request.data.get("tracking_number")
+            if not isinstance(tracking_number, str) or not re.fullmatch(
+                r"[A-Za-z0-9]{1,40}", tracking_number
+            ):
+                return Response(
+                    {"detail": "Indica el número de rastreo confirmado en FedEx."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            shipment.status = FedexShipment.Status.CREATED
+            shipment.tracking_number = tracking_number
+            shipment.tracking_numbers = [tracking_number]
+            if not shipment.labels.exists():
+                shipment.warning = (
+                    "Creación confirmada por un administrador. La etiqueta debe "
+                    "recuperarse desde FedEx; no está almacenada en el sistema."
+                )
+        else:
+            shipment.status = FedexShipment.Status.FAILED
+            shipment.warning = ""
+
+        shipment.resolved_by = request.user
+        shipment.resolution_note = note.strip()
+        shipment.resolved_at = timezone.now()
+        shipment.error_detail = ""
+        updated = FedexShipment.objects.filter(
+            pk=shipment.pk,
+            company_id=company_id,
+            status=FedexShipment.Status.UNCERTAIN,
+        ).update(
+            status=shipment.status,
+            tracking_number=shipment.tracking_number,
+            tracking_numbers=shipment.tracking_numbers,
+            warning=shipment.warning,
+            resolved_by=shipment.resolved_by,
+            resolution_note=shipment.resolution_note,
+            resolved_at=shipment.resolved_at,
+            error_detail=shipment.error_detail,
+            updated_at=timezone.now(),
+        )
+        if not updated:
+            return Response(
+                {"detail": "El estado del envío cambió; actualiza el historial."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response({"shipment": FedexCreateShipmentView._shipment_response(shipment)})
 
 
 class FedexEmailShipmentView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanAccessQuotes]
 
     def post(self, request):
         if not settings.FEDEX_SHIPMENT_CREATION_ENABLED:
@@ -283,9 +681,31 @@ class FedexEmailShipmentView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
+        company_id = get_active_company_id(request)
+        role = user_role_for_company(request.user, company_id)
+        if role not in {Role.SUPERADMIN, Role.ADMIN_COMPANY, Role.OPERATOR}:
+            raise PermissionDenied("No tienes permiso para enviar guías FedEx.")
+
         serializer = FedexEmailShipmentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        shipment = FedexShipment.objects.filter(
+            company_id=company_id,
+            cb_number=data["cb_number"],
+            tracking_number=data["tracking_number"],
+            status=FedexShipment.Status.CREATED,
+        ).prefetch_related("labels").first()
+        if shipment is None:
+            return Response(
+                {"detail": "No se encontró un envío FedEx creado con esa guía."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        labels = list(shipment.labels.all())
+        if not labels:
+            return Response(
+                {"detail": "Este envío no tiene etiquetas PDF almacenadas para adjuntar."},
+                status=status.HTTP_409_CONFLICT,
+            )
 
         if (
             not settings.EMAIL_HOST_USER
@@ -307,24 +727,19 @@ class FedexEmailShipmentView(APIView):
         )
 
         total_size = 0
-        try:
-            for index, label in enumerate(data["labels"], start=1):
-                encoded = label.get("content_base64")
-                if not isinstance(encoded, str):
-                    raise ValueError("La etiqueta recibida no es válida.")
-                if len(encoded) > 14 * 1024 * 1024:
-                    raise ValueError("El tamaño de las etiquetas excede el límite permitido.")
-                content = base64.b64decode(encoded, validate=True)
-                total_size += len(content)
-                if len(content) > 10 * 1024 * 1024 or total_size > 20 * 1024 * 1024:
-                    raise ValueError("El tamaño de las etiquetas excede el límite permitido.")
-                if not content.startswith(b"%PDF-"):
-                    raise ValueError("El archivo recibido no es una etiqueta PDF válida.")
-
-                filename = f"{data['cb_number']}-fedex-label-{index}.pdf"
-                email.attach(filename, content, "application/pdf")
-        except (ValueError, binascii.Error) as error:
-            return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+        for label in labels:
+            content = bytes(label.content)
+            total_size += len(content)
+            if (
+                not content.startswith(b"%PDF-")
+                or len(content) > 10 * 1024 * 1024
+                or total_size > 20 * 1024 * 1024
+            ):
+                return Response(
+                    {"detail": "Las etiquetas almacenadas no son válidas o exceden el límite."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            email.attach(label.file_name, content, "application/pdf")
 
         try:
             email.send(fail_silently=False)

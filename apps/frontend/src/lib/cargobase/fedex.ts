@@ -50,6 +50,19 @@ export type FedexDraft = {
   packages: FedexPackage[];
 };
 
+export function fedexDomesticShipmentPayload(draft: FedexDraft) {
+  return {
+    ...draft,
+    pickup_type: "DROPOFF_AT_FEDEX_LOCATION",
+    duties_payment_type: undefined,
+    duties_account_number: undefined,
+    packages: draft.packages.map((item) => ({
+      ...item,
+      customs_items: undefined,
+    })),
+  };
+}
+
 export function fedexRateQuoteKey(draft: FedexDraft): string {
   const party = (value: FedexParty) => ({
     country_code: value.country_code.trim(),
