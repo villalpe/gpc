@@ -48,7 +48,10 @@ with FedEx before carrying out any manual recovery.
 
 Sending the label by email is a separate, user-confirmed action after shipment
 creation; the backend attaches the stored label, not a file supplied by the
-browser. Configure the backend SMTP sender with `EMAIL_HOST`, `EMAIL_PORT`,
+browser. It is also available on created shipments with stored labels in
+Mis envíos, for authorized operators and company administrators. The entered
+address receives the labels directly, including in sandbox. Configure the
+backend SMTP sender with `EMAIL_HOST`, `EMAIL_PORT`,
 `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, and
 `DEFAULT_FROM_EMAIL`. For Gmail, use a mailbox app password rather than its
 normal sign-in password. Do not put these credentials in frontend or

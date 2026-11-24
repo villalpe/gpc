@@ -698,6 +698,25 @@ class FedexShipmentTests(TestCase):
         self.assertEqual(mail.outbox[0].to, ["requestor@example.com"])
         self.assertEqual(mail.outbox[0].attachments[0][0], "S123456789-fedex-label-1.pdf")
 
+        payload["recipient_email"] = "another@example.com"
+        request = APIRequestFactory().post(
+            "/api/integrations/fedex/shipments/email/", payload, format="json", **self.headers
+        )
+        force_authenticate(request, user=self.user)
+        self.assertEqual(FedexEmailShipmentView.as_view()(request).status_code, 200)
+        self.assertEqual(mail.outbox[1].to, ["another@example.com"])
+        self.assertEqual(mail.outbox[1].attachments[0][1], b"%PDF-1.4 test")
+
+        other = Company.objects.create(legal_name="Company B", slug="company-b")
+        shipment.company = other
+        shipment.save()
+        request = APIRequestFactory().post(
+            "/api/integrations/fedex/shipments/email/", payload, format="json", **self.headers
+        )
+        force_authenticate(request, user=self.user)
+        self.assertEqual(FedexEmailShipmentView.as_view()(request).status_code, 404)
+        self.assertEqual(len(mail.outbox), 2)
+
     @override_settings(FEDEX_SHIPMENT_CREATION_ENABLED=False)
     @patch("integrations.views.FedexClient.create_shipment")
     def test_creation_is_disabled_for_review(self, create_shipment):

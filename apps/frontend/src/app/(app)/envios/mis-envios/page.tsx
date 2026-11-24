@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import FedexCreationNotification, { type NotificationStatus } from "@/components/tracking/FedexCreationNotification";
+import FedexLabelEmail from "@/components/tracking/FedexLabelEmail";
 import {
   AlertCircle,
   ChevronDown,
@@ -565,6 +566,13 @@ export default function MisEnviosPage() {
                           ))}
                           {shipment.labels.length === 0 && <span className="text-xs text-slate-400">No disponible</span>}
                         </div>
+                        {canNotifyFedex && shipment.status === "created" &&
+                          shipment.tracking_number && shipment.labels.length > 0 && (
+                            <FedexLabelEmail
+                              cbNumber={shipment.cb_number}
+                              trackingNumber={shipment.tracking_number}
+                            />
+                          )}
                       </td>
                       {canResolveFedex && (
                         <td className="px-3 py-3">
