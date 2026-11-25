@@ -1,5 +1,7 @@
 import math
 
+from .mappers import build_customs_commodities
+
 
 def build_rate_request(data, account_number):
     def address(party):
@@ -27,7 +29,7 @@ def build_rate_request(data, account_number):
                 },
             })
 
-    return {
+    result = {
         "accountNumber": {"value": account_number},
         "rateRequestControlParameters": {"returnTransitTimes": True},
         "requestedShipment": {
@@ -40,6 +42,13 @@ def build_rate_request(data, account_number):
             "requestedPackageLineItems": packages,
         },
     }
+    if data["sender"]["country_code"].upper() != data["recipient"]["country_code"].upper():
+        commodities, total, currency = build_customs_commodities(data["packages"])
+        result["requestedShipment"]["customsClearanceDetail"] = {
+            "commodities": commodities,
+            "totalCustomsValue": {"amount": float(total), "currency": currency},
+        }
+    return result
 
 
 def normalize_rate_response(raw):

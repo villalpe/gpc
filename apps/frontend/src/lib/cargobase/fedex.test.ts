@@ -114,6 +114,23 @@ describe("Cargobase to FedEx draft mapping", () => {
     }, "S123456789");
     expect(draft.sender.state).toBe("OH");
     expect(draft.recipient.state).toBe("MX-AGU");
+    const canada = fedexDraftFromCargobase({
+      schedule: { stop1_country_code: "CA", stop1_state_code: "CA-ON" },
+    }, "S123456789");
+    expect(canada.recipient.state).toBe("ON");
+  });
+
+  it("invalidates an international quote when customs data changes", () => {
+    const draft = fedexDraftFromCargobase({
+      schedule: { pickup_country_code: "US", stop1_country_code: "CA" },
+      organization: { good_items: [{ units: 1 }] },
+    }, "S123456789");
+    const packages = [...draft.packages];
+    packages[0] = {
+      ...packages[0],
+      customs_items: [{ ...packages[0].customs_items[0], customs_value: "100" }],
+    };
+    expect(fedexRateQuoteKey({ ...draft, packages })).not.toBe(fedexRateQuoteKey(draft));
   });
 
   it("keeps a selected rate tied to its shipment inputs but not its ship date", () => {

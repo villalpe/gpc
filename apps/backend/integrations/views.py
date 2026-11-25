@@ -233,7 +233,7 @@ class FedexCreateShipmentView(APIView):
         snapshot = {
             key: value
             for key, value in data.items()
-            if key not in {"payment_account_number", "duties_account_number"}
+            if key not in {"payment_account_number", "duties_account_number", "commercial_invoice"}
         }
         return json.loads(json.dumps(snapshot, cls=DjangoJSONEncoder))
 
@@ -273,17 +273,36 @@ class FedexCreateShipmentView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        if (
-            data["sender"]["country_code"].upper() != "US"
-            or data["recipient"]["country_code"].upper() != "US"
-        ):
+        origin = data["sender"]["country_code"].upper()
+        destination = data["recipient"]["country_code"].upper()
+        international = (origin, destination) == ("US", "CA")
+        if (origin, destination) not in {("US", "US"), ("US", "CA")}:
             return Response(
                 {
                     "detail": (
                         "La creación de guías solo está habilitada para envíos "
-                        "domésticos US→US."
+                        "US→US y US→Canadá."
                     )
                 },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if international and not data.get("commercial_invoice"):
+            return Response(
+                {"detail": "Adjunta la factura comercial en PDF para US→Canadá."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if international and not data["invoice_reviewed"]:
+            return Response(
+                {"detail": "Confirma que los datos aduanales coinciden con la factura."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if international and data["service_type"] not in {
+            "INTERNATIONAL_PRIORITY", "FEDEX_INTERNATIONAL_PRIORITY",
+            "FEDEX_INTERNATIONAL_PRIORITY_EXPRESS", "INTERNATIONAL_ECONOMY",
+            "FEDEX_INTERNATIONAL_CONNECT_PLUS",
+        }:
+            return Response(
+                {"detail": "El servicio no está habilitado para la factura electrónica."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if data["pickup_type"] != "DROPOFF_AT_FEDEX_LOCATION":
@@ -366,8 +385,50 @@ class FedexCreateShipmentView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
+        client = FedexClient()
+        if international:
+            try:
+                document_id = client.upload_commercial_invoice(data["commercial_invoice"])
+            except (
+                requests.RequestException, ValueError, KeyError, TypeError, AttributeError
+            ) as error:
+                codes = []
+                upstream = error.response if isinstance(error, requests.HTTPError) else None
+                if upstream is not None:
+                    try:
+                        codes = [
+                            item["code"] for item in upstream.json().get("errors", [])
+                            if isinstance(item, dict)
+                            and isinstance(item.get("code"), str)
+                            and re.fullmatch(r"[A-Za-z0-9._-]{1,100}", item["code"])
+                        ]
+                    except (ValueError, AttributeError, TypeError):
+                        logger.warning("FedEx returned an invalid invoice rejection body.")
+                logger.warning(
+                    "FedEx invoice upload not confirmed for shipment %s (HTTP %s).",
+                    shipment.pk, upstream.status_code if upstream is not None else "unknown",
+                )
+                shipment.status = FedexShipment.Status.FAILED
+                shipment.error_detail = (
+                    "No se confirmó la carga de la factura; no se solicitó la guía."
+                )
+                shipment.save(update_fields=["status", "error_detail", "updated_at"])
+                return Response(
+                    {"detail": shipment.error_detail, "codes": codes},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+            payload["requestedShipment"]["shipmentSpecialServices"] = {
+                "specialServiceTypes": ["ELECTRONIC_TRADE_DOCUMENTS"],
+                "etdDetail": {
+                    "attachedDocuments": [{
+                        "documentType": "COMMERCIAL_INVOICE",
+                        "documentId": document_id,
+                    }],
+                },
+            }
+
         try:
-            raw = FedexClient().create_shipment(payload)
+            raw = client.create_shipment(payload)
         except requests.HTTPError as error:
             upstream = error.response
             codes = []

@@ -216,6 +216,8 @@ export default function FedexShipmentReviewPage() {
   const [emailSent, setEmailSent] = useState(false);
   const [preferencesReady, setPreferencesReady] = useState(false);
   const [confirmSandbox, setConfirmSandbox] = useState(false);
+  const [invoice, setInvoice] = useState<File | null>(null);
+  const [invoiceReviewed, setInvoiceReviewed] = useState(false);
   const [selectedRate, setSelectedRate] = useState<SelectedFedexRate | null>(null);
   const isInternational = useMemo(
     () => (draft ? isInternationalFedexDraft(draft) : false),
@@ -237,6 +239,11 @@ export default function FedexShipmentReviewPage() {
     draft &&
       draft.sender.country_code.toUpperCase() === "US" &&
       draft.recipient.country_code.toUpperCase() === "US"
+  );
+  const isUsCanada = Boolean(
+    draft &&
+      draft.sender.country_code.trim().toUpperCase() === "US" &&
+      draft.recipient.country_code.trim().toUpperCase() === "CA"
   );
 
   useEffect(() => {
@@ -274,6 +281,7 @@ export default function FedexShipmentReviewPage() {
     key: keyof FedexParty,
     value: string | string[]
   ) {
+    setInvoiceReviewed(false);
     setDraft((current) =>
       current
         ? {
@@ -290,6 +298,7 @@ export default function FedexShipmentReviewPage() {
     key: Exclude<keyof FedexPackage, "customs_items">,
     value: string
   ) {
+    setInvoiceReviewed(false);
     setDraft((current) => {
       if (!current) return current;
       const packages = [...current.packages];
@@ -304,6 +313,7 @@ export default function FedexShipmentReviewPage() {
     key: keyof FedexCommodity,
     value: string
   ) {
+    setInvoiceReviewed(false);
     setDraft((current) => {
       if (!current) return current;
       const packages = [...current.packages];
@@ -320,6 +330,7 @@ export default function FedexShipmentReviewPage() {
   }
 
   function addCommodity(packageIndex: number) {
+    setInvoiceReviewed(false);
     setDraft((current) => {
       if (!current) return current;
       const packages = [...current.packages];
@@ -333,6 +344,7 @@ export default function FedexShipmentReviewPage() {
           quantity: "",
           weight: "",
           weight_units: "",
+          unit_price: "",
           customs_value: "",
           customs_currency: "",
         },
@@ -343,6 +355,7 @@ export default function FedexShipmentReviewPage() {
   }
 
   function removeCommodity(packageIndex: number, commodityIndex: number) {
+    setInvoiceReviewed(false);
     setDraft((current) => {
       if (!current) return current;
       const packages = [...current.packages];
@@ -356,6 +369,7 @@ export default function FedexShipmentReviewPage() {
   }
 
   function addPackage() {
+    setInvoiceReviewed(false);
     setDraft((current) =>
       current
         ? {
@@ -378,6 +392,7 @@ export default function FedexShipmentReviewPage() {
                     quantity: "1",
                     weight: "",
                     weight_units: "",
+                    unit_price: "",
                     customs_value: "",
                     customs_currency: "",
                   },
@@ -396,8 +411,12 @@ export default function FedexShipmentReviewPage() {
       setError("Guarda las preferencias de correo antes de crear la guía.");
       return;
     }
-    if (!isDomesticUs) {
-      setError("En esta primera etapa solo se pueden crear envíos domésticos dentro de Estados Unidos.");
+    if (!isDomesticUs && !isUsCanada) {
+      setError("En esta etapa solo se pueden crear envíos US→US y US→Canadá.");
+      return;
+    }
+    if (isUsCanada && (!invoice || invoice.size > 1024 * 1024 || !invoiceReviewed)) {
+      setError("Adjunta un PDF de máximo 1 MB y confirma la revisión de la factura.");
       return;
     }
     setCreating(true);
@@ -405,13 +424,24 @@ export default function FedexShipmentReviewPage() {
     setNotice("");
 
     try {
+      let payload: object = fedexDomesticShipmentPayload(draft);
+      if (isUsCanada && invoice) {
+        const bytes = new Uint8Array(await invoice.arrayBuffer());
+        if (new TextDecoder().decode(bytes.slice(0, 5)) !== "%PDF-") {
+          throw new Error("La factura seleccionada no es un PDF válido.");
+        }
+        let binary = "";
+        for (const byte of bytes) binary += String.fromCharCode(byte);
+        payload = { ...draft, commercial_invoice: btoa(binary), invoice_reviewed: invoiceReviewed };
+      }
       const response = await fetch("/api/fedex/shipments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(fedexDomesticShipmentPayload(draft)),
+        body: JSON.stringify(payload),
       });
       const data = (await response.json().catch(() => ({}))) as {
       detail?: string;
+      codes?: string[];
       shipment?: CreatedShipment;
       } & Partial<CreatedShipment>;
       if (!response.ok) {
@@ -420,13 +450,14 @@ export default function FedexShipmentReviewPage() {
         setError(data.detail || "No se pudo confirmar el resultado. No vuelvas a crear el envío.");
         return;
       }
-      throw new Error(data.detail || "No se pudo crear el envío en FedEx.");
+      const codes = Array.isArray(data.codes) && data.codes.length ? ` (${data.codes.join(", ")})` : "";
+      throw new Error(`${data.detail || "No se pudo crear el envío en FedEx."}${codes}`);
       }
       const shipment = data as CreatedShipment;
       setCreated(shipment);
       setNotice(
       shipment.status === "created"
-        ? "FedEx creó el envío. Revisa la guía y la etiqueta antes de enviar el correo."
+        ? `FedEx creó el envío. Revisa la guía y la etiqueta antes de enviar el correo.${isUsCanada ? " Verifica también en FedEx que la factura comercial esté asociada." : ""}`
         : "La respuesta de FedEx requiere verificación. El CB quedó bloqueado para evitar duplicados."
       );
     } catch (reason) {
@@ -621,6 +652,34 @@ export default function FedexShipmentReviewPage() {
             </div>
           </section>
 
+          {isUsCanada && (
+            <section className={card}>
+              <h2 className="text-lg font-semibold">Factura comercial</h2>
+              <p className="mt-2 text-sm text-slate-600 dark:text-white/70">
+                Adjunta el PDF de la factura comercial del CB (máximo 1 MB). Se enviará a
+                FedEx sandbox al crear la guía, no al consultar tarifas. Los datos se capturan
+                manualmente abajo; el PDF no se almacena en GPC.
+              </p>
+              <label className={`${label} mt-4`}>
+                Factura comercial PDF
+                <input
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  className={input}
+                  required
+                  onChange={(event) => {
+                    setInvoice(event.target.files?.[0] ?? null);
+                    setInvoiceReviewed(false);
+                  }}
+                />
+              </label>
+              <label className="mt-4 flex gap-2 text-sm">
+                <input type="checkbox" checked={invoiceReviewed} onChange={(event) => setInvoiceReviewed(event.target.checked)} />
+                <span>Confirmo que revisé la factura y que los datos aduanales capturados coinciden con ella.</span>
+              </label>
+            </section>
+          )}
+
           <FedexRates
             draft={draft}
             onSelect={(date, service) =>
@@ -638,8 +697,14 @@ export default function FedexShipmentReviewPage() {
             })}
           />
 
-          <PartyFields title="Remitente (Cargobase)" party={draft.sender} onChange={(key, value) => updateParty("sender", key, value)} onSelect={(party) => setDraft({ ...draft, sender: party, service_type: "" })} />
-          <PartyFields title="Destinatario (Cargobase)" party={draft.recipient} onChange={(key, value) => updateParty("recipient", key, value)} onSelect={(party) => setDraft({ ...draft, recipient: party, service_type: "" })} />
+          <PartyFields title="Remitente (Cargobase)" party={draft.sender} onChange={(key, value) => updateParty("sender", key, value)} onSelect={(party) => {
+            setInvoiceReviewed(false);
+            setDraft({ ...draft, sender: party, service_type: "" });
+          }} />
+          <PartyFields title="Destinatario (Cargobase)" party={draft.recipient} onChange={(key, value) => updateParty("recipient", key, value)} onSelect={(party) => {
+            setInvoiceReviewed(false);
+            setDraft({ ...draft, recipient: party, service_type: "" });
+          }} />
 
           <section className={card}>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -689,7 +754,10 @@ export default function FedexShipmentReviewPage() {
                   <div className="mb-4 flex items-center justify-between">
                     <h3 className="font-semibold">Paquete {index + 1}</h3>
                     {draft.packages.length > 1 && (
-                      <button type="button" onClick={() => setDraft({ ...draft, packages: draft.packages.filter((_, itemIndex) => itemIndex !== index) })} aria-label={`Eliminar paquete ${index + 1}`} className="text-rose-600">
+                      <button type="button" onClick={() => {
+                        setInvoiceReviewed(false);
+                        setDraft({ ...draft, packages: draft.packages.filter((_, itemIndex) => itemIndex !== index) });
+                      }} aria-label={`Eliminar paquete ${index + 1}`} className="text-rose-600">
                         <Trash2 className="h-4 w-4" />
                       </button>
                     )}
@@ -709,6 +777,10 @@ export default function FedexShipmentReviewPage() {
                             <h4 className="font-medium">Mercancías / datos aduanales</h4>
                             <button type="button" onClick={() => addCommodity(index)} className="text-sm font-semibold text-[#C1374A]">Agregar mercancía</button>
                           </div>
+                          <p className="mb-3 text-xs text-slate-500 dark:text-white/60">
+                            Captura el valor unitario y el valor total de cada mercancía según la
+                            factura. La cantidad y el valor total corresponden al renglón completo.
+                          </p>
                           <div className="space-y-4">
                             {item.customs_items.map((commodity, commodityIndex) => (
                               <div key={commodityIndex} className="rounded-lg border border-slate-200 p-3 dark:border-white/10">
@@ -728,10 +800,11 @@ export default function FedexShipmentReviewPage() {
                                 <div className="grid gap-4 sm:grid-cols-3">
                                   <Field title="Descripción aduanal" value={commodity.description} onChange={(value) => updateCommodity(index, commodityIndex, "description", value)} required />
                                   <Field title="Código HS" value={commodity.hs_code} onChange={(value) => updateCommodity(index, commodityIndex, "hs_code", value)} required />
-                                  <Field title="País de origen (ISO 2 letras)" value={commodity.origin_country} onChange={(value) => updateCommodity(index, commodityIndex, "origin_country", value.toUpperCase())} required />
+                                  <Field title="País de fabricación (ISO 2 letras)" value={commodity.origin_country} onChange={(value) => updateCommodity(index, commodityIndex, "origin_country", value.toUpperCase())} required />
                                   <Field title="Cantidad de mercancía" type="number" step="1" value={commodity.quantity} onChange={(value) => updateCommodity(index, commodityIndex, "quantity", value)} required />
                                   <Field title="Peso de mercancía" type="number" step="0.001" value={commodity.weight} onChange={(value) => updateCommodity(index, commodityIndex, "weight", value)} required />
                                   <SelectField title="Unidad de peso" value={commodity.weight_units} onChange={(value) => updateCommodity(index, commodityIndex, "weight_units", value)} required options={["KG", "LB"]} />
+                                  <Field title="Valor unitario" type="number" step="0.01" value={commodity.unit_price} onChange={(value) => updateCommodity(index, commodityIndex, "unit_price", value)} required />
                                   <Field title="Valor aduanal total" type="number" step="0.01" value={commodity.customs_value} onChange={(value) => updateCommodity(index, commodityIndex, "customs_value", value)} required />
                                   <Field title="Moneda (ISO 3 letras)" value={commodity.customs_currency} onChange={(value) => updateCommodity(index, commodityIndex, "customs_currency", value.toUpperCase())} required placeholder="USD" />
                                 </div>
@@ -756,9 +829,9 @@ export default function FedexShipmentReviewPage() {
             onReadyChange={setPreferencesReady}
           />
 
-          {!isDomesticUs && (
+          {!isDomesticUs && !isUsCanada && (
             <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-              La creación de guías está habilitada por ahora solo para envíos domésticos US→US.
+              La creación de guías está habilitada por ahora solo para US→US y US→Canadá en sandbox.
             </p>
           )}
           <label className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
@@ -773,7 +846,7 @@ export default function FedexShipmentReviewPage() {
           </label>
           {!preferencesReady && <p className="text-sm text-amber-700">Carga y guarda los cambios de preferencias de correo antes de crear la guía.</p>}
           <div className="flex justify-end">
-            <button type="submit" disabled={creating || !confirmSandbox || !isDomesticUs || !preferencesReady} className="inline-flex items-center gap-2 rounded-xl bg-[#C1374A] px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">
+            <button type="submit" disabled={creating || !confirmSandbox || (!isDomesticUs && !isUsCanada) || (isUsCanada && (!invoice || !invoiceReviewed)) || !preferencesReady} className="inline-flex items-center gap-2 rounded-xl bg-[#C1374A] px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">
               <PackageCheck className="h-4 w-4" /> {creating ? "Creando guía en sandbox..." : "Crear guía FedEx"}
             </button>
           </div>

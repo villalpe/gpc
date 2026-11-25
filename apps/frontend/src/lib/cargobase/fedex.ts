@@ -21,6 +21,7 @@ export type FedexCommodity = {
   quantity: string;
   weight: string;
   weight_units: string;
+  unit_price: string;
   customs_value: string;
   customs_currency: string;
 };
@@ -85,6 +86,7 @@ export function fedexRateQuoteKey(draft: FedexDraft): string {
       width: item.width,
       height: item.height,
       dimension_units: item.dimension_units,
+      ...(isInternationalFedexDraft(draft) ? { customs_items: item.customs_items } : {}),
     })),
   });
 }
@@ -134,7 +136,8 @@ function party(root: unknown, point: "pickup" | "stop1"): FedexParty {
   const rawState = string(
     first(schedule("state_code"), schedule("state"), address("state_code"), address("state"))
   );
-  const state = countryCode === "US" && /^US-[A-Z]{2}$/i.test(rawState)
+  const state = /^(US|CA)$/.test(countryCode) &&
+    new RegExp(`^${countryCode}-[A-Z]{2}$`, "i").test(rawState)
     ? rawState.slice(3).toUpperCase()
     : rawState;
 
@@ -194,6 +197,7 @@ function commodityFromItem(value: unknown, item: Obj, usePackageValues: boolean)
     origin_country: string(customs.origin_country).toUpperCase(),
     quantity: string(first(customs.quantity, usePackageValues ? item.units : "")),
     ...commodityWeight,
+    unit_price: string(customs.unit_price),
     customs_value: string(customs.value),
     customs_currency: string(customs.currency_code).toUpperCase(),
   };

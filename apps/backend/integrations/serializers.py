@@ -1,3 +1,5 @@
+import base64
+import binascii
 from decimal import Decimal
 
 from rest_framework import serializers
@@ -14,6 +16,30 @@ class FedexRateAddressSerializer(serializers.Serializer):
     state = serializers.CharField(max_length=3, required=False, allow_blank=True)
 
 
+class FedexCommoditySerializer(serializers.Serializer):
+    description = serializers.CharField(max_length=450)
+    hs_code = serializers.CharField(max_length=20)
+    origin_country = serializers.RegexField(r"^[A-Za-z]{2}$")
+    quantity = serializers.IntegerField(min_value=1)
+    weight = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=3,
+        min_value=Decimal("0.001"),
+    )
+    weight_units = serializers.ChoiceField(choices=("KG", "LB"))
+    unit_price = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        min_value=Decimal("0"),
+    )
+    customs_value = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        min_value=Decimal("0"),
+    )
+    customs_currency = serializers.RegexField(r"^[A-Za-z]{3}$")
+
+
 class FedexRatePackageSerializer(serializers.Serializer):
     quantity = serializers.IntegerField(min_value=1, max_value=40)
     weight = serializers.DecimalField(
@@ -24,6 +50,7 @@ class FedexRatePackageSerializer(serializers.Serializer):
     width = serializers.IntegerField(min_value=1, max_value=9999)
     height = serializers.IntegerField(min_value=1, max_value=9999)
     dimension_units = serializers.ChoiceField(choices=("CM", "IN"))
+    customs_items = FedexCommoditySerializer(many=True, required=False, max_length=100)
 
 
 class FedexRateSerializer(serializers.Serializer):
@@ -47,6 +74,19 @@ class FedexRateSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"detail": "FedEx doméstico solo aplica dentro de EE. UU. según la regla de GPC."}
             )
+        if origin != destination:
+            currencies = set()
+            for package in attrs["packages"]:
+                items = package.get("customs_items", [])
+                if not items:
+                    raise serializers.ValidationError(
+                        {"packages": "Agrega los datos aduanales de cada paquete."}
+                    )
+                currencies.update(item["customs_currency"].upper() for item in items)
+            if len(currencies) != 1:
+                raise serializers.ValidationError(
+                    {"packages": "Usa la misma moneda para todas las mercancías."}
+                )
         return attrs
 
     def validate_packages(self, packages):
@@ -108,25 +148,6 @@ class FedexNotificationPreferencesSerializer(serializers.Serializer):
         return attrs
 
 
-class FedexCommoditySerializer(serializers.Serializer):
-    description = serializers.CharField(max_length=450)
-    hs_code = serializers.CharField(max_length=20)
-    origin_country = serializers.RegexField(r"^[A-Za-z]{2}$")
-    quantity = serializers.IntegerField(min_value=1)
-    weight = serializers.DecimalField(
-        max_digits=10,
-        decimal_places=3,
-        min_value=Decimal("0.001"),
-    )
-    weight_units = serializers.ChoiceField(choices=("KG", "LB"))
-    customs_value = serializers.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        min_value=Decimal("0"),
-    )
-    customs_currency = serializers.RegexField(r"^[A-Za-z]{3}$")
-
-
 class FedexPackageSerializer(serializers.Serializer):
     quantity = serializers.IntegerField(min_value=1, max_value=999)
     weight = serializers.DecimalField(
@@ -184,6 +205,17 @@ class FedexCreateShipmentSerializer(serializers.Serializer):
     sender = FedexPartySerializer()
     recipient = FedexPartySerializer()
     packages = FedexPackageSerializer(many=True, allow_empty=False, max_length=40)
+    commercial_invoice = serializers.CharField(required=False, max_length=1400000, write_only=True)
+    invoice_reviewed = serializers.BooleanField(required=False, default=False)
+
+    def validate_commercial_invoice(self, value):
+        try:
+            content = base64.b64decode(value, validate=True)
+        except (ValueError, binascii.Error):
+            raise serializers.ValidationError("La factura debe ser un PDF válido en base64.")
+        if not content.startswith(b"%PDF-") or len(content) > 1024 * 1024:
+            raise serializers.ValidationError("La factura debe ser un PDF de máximo 1 MB.")
+        return content
 
     def validate(self, attrs):
         international = (

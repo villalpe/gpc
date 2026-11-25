@@ -1,3 +1,5 @@
+import json
+
 import requests
 from django.conf import settings
 
@@ -64,3 +66,30 @@ class FedexClient:
         )
         resp.raise_for_status()
         return resp.json()
+
+    def upload_commercial_invoice(self, content: bytes) -> str:
+        metadata = {
+            "workflowName": "ETDPreshipment",
+            "carrierCode": "FDXE",
+            "name": "commercial-invoice.pdf",
+            "contentType": "application/pdf",
+            "meta": {
+                "shipDocumentType": "COMMERCIAL_INVOICE",
+                "originCountryCode": "US",
+                "destinationCountryCode": "CA",
+            },
+        }
+        response = requests.post(
+            f"{self.base_url}/documents/v1/etds/upload",
+            headers={"Authorization": f"Bearer {self._get_token()}"},
+            files=[
+                ("document", (None, json.dumps(metadata), "application/json")),
+                ("attachment", ("commercial-invoice.pdf", content, "application/pdf")),
+            ],
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        doc_id = response.json().get("output", {}).get("meta", {}).get("docId")
+        if not isinstance(doc_id, str) or not doc_id.strip() or len(doc_id) > 200:
+            raise ValueError("FedEx no confirmó la carga de la factura.")
+        return doc_id

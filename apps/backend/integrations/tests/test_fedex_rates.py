@@ -60,7 +60,28 @@ class FedexRateTests(SimpleTestCase):
         self.assertEqual(shipment["packagingType"], "YOUR_PACKAGING")
         self.assertNotIn("serviceType", shipment)
         self.assertEqual(shipment["rateRequestType"], ["ACCOUNT"])
+        self.assertNotIn("customsClearanceDetail", shipment)
         self.assertTrue(payload["rateRequestControlParameters"]["returnTransitTimes"])
+
+    def test_international_rate_requires_and_maps_actual_customs(self):
+        self.payload["recipient"]["country_code"] = "CA"
+        self.payload["recipient"]["state"] = "ON"
+        serializer = FedexRateSerializer(data=self.payload)
+        self.assertFalse(serializer.is_valid())
+        self.payload["packages"][0]["customs_items"] = [{
+            "description": "Steel part", "hs_code": "123456", "origin_country": "US",
+            "quantity": 2, "weight": "2", "weight_units": "LB",
+            "unit_price": "25.00", "customs_value": "50.00", "customs_currency": "USD",
+        }]
+        serializer = FedexRateSerializer(data=self.payload)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        requested = build_rate_request(serializer.validated_data, "test-account")
+        shipment = requested["requestedShipment"]
+        customs = shipment["customsClearanceDetail"]
+        self.assertEqual(shipment["recipient"]["address"]["stateOrProvinceCode"], "ON")
+        self.assertEqual(customs["totalCustomsValue"], {"amount": 50.0, "currency": "USD"})
+        self.assertEqual(customs["commodities"][0]["unitPrice"]["amount"], 25.0)
+        self.assertEqual(customs["commodities"][0]["harmonizedCode"], "123456")
 
     def test_normalizes_account_price_and_estimate(self):
         rate = normalize_rate_response(self.raw)[0]

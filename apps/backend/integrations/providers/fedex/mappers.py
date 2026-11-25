@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 
 # derivedCode/status code mapping (FedEx track)
 # IN = In transit, DL = Delivered, DE = Delivery exception, etc.
@@ -109,6 +110,31 @@ def map_fedex_tracking(raw: dict, tracking_number: str) -> dict:
     }
 
 
+def build_customs_commodities(packages):
+    commodities = []
+    total = Decimal("0")
+    currency = None
+    for package in packages:
+        for item in package.get("customs_items", []):
+            currency = item["customs_currency"].upper()
+            value = item["customs_value"]
+            total += value
+            commodities.append({
+                "description": item["description"],
+                "countryOfManufacture": item["origin_country"].upper(),
+                "harmonizedCode": item["hs_code"],
+                "quantity": item["quantity"],
+                "quantityUnits": "EA",
+                "unitPrice": {
+                    "amount": float(item["unit_price"]),
+                    "currency": currency,
+                },
+                "customsValue": {"amount": float(value), "currency": currency},
+                "weight": {"units": item["weight_units"], "value": float(item["weight"])},
+            })
+    return commodities, total, currency
+
+
 def build_fedex_shipment_request(data: dict, account_number: str) -> dict:
     sender = data["sender"]
     recipient = data["recipient"]
@@ -137,9 +163,9 @@ def build_fedex_shipment_request(data: dict, account_number: str) -> dict:
         sender["country_code"].upper() != recipient["country_code"].upper()
     )
     requested_packages = []
-    commodities = []
-    total_customs_value = 0
-    customs_currency = None
+    commodities, total_customs_value, customs_currency = (
+        build_customs_commodities(packages) if international else ([], Decimal("0"), None)
+    )
 
     for index, package in enumerate(packages, start=1):
         requested_packages.append(
@@ -164,33 +190,6 @@ def build_fedex_shipment_request(data: dict, account_number: str) -> dict:
                 ],
             }
         )
-
-        if international:
-            for item in package.get("customs_items", []):
-                currency = item["customs_currency"].upper()
-                customs_currency = customs_currency or currency
-                total_customs_value += float(item["customs_value"])
-                commodities.append(
-                    {
-                        "description": item["description"],
-                        "countryOfManufacture": item["origin_country"].upper(),
-                        "harmonizedCode": item["hs_code"],
-                        "quantity": item["quantity"],
-                        "quantityUnits": "EA",
-                        "unitPrice": {
-                            "amount": float(item["customs_value"]) / item["quantity"],
-                            "currency": currency,
-                        },
-                        "customsValue": {
-                            "amount": float(item["customs_value"]),
-                            "currency": currency,
-                        },
-                        "weight": {
-                            "units": item["weight_units"],
-                            "value": float(item["weight"]),
-                        },
-                    }
-                )
 
     requested_shipment = {
         "shipDatestamp": data["ship_date"].isoformat(),
@@ -241,7 +240,7 @@ def build_fedex_shipment_request(data: dict, account_number: str) -> dict:
             },
             "commodities": commodities,
             "totalCustomsValue": {
-                "amount": total_customs_value,
+                "amount": float(total_customs_value),
                 "currency": customs_currency,
             },
         }

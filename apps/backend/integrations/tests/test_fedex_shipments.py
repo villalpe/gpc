@@ -1,3 +1,4 @@
+import base64
 from datetime import date, timedelta
 from decimal import Decimal
 from unittest.mock import patch
@@ -10,6 +11,7 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 from accounts.models import Membership, Role, User
 from companies.models import Company
 from integrations.models import FedexNotificationPreferences, FedexShipment, FedexShipmentLabel
+from integrations.providers.fedex.client import FedexClient
 from integrations.providers.fedex.mappers import (
     build_fedex_shipment_request,
     map_fedex_shipment,
@@ -82,6 +84,7 @@ class FedexShipmentTests(TestCase):
                             "quantity": 2,
                             "weight": Decimal("1.250"),
                             "weight_units": "KG",
+                            "unit_price": Decimal("50.00"),
                             "customs_value": Decimal("100.00"),
                             "customs_currency": "USD",
                         },
@@ -92,6 +95,7 @@ class FedexShipmentTests(TestCase):
                             "quantity": 1,
                             "weight": Decimal("0.250"),
                             "weight_units": "KG",
+                            "unit_price": Decimal("25.00"),
                             "customs_value": Decimal("25.00"),
                             "customs_currency": "USD",
                         },
@@ -173,6 +177,126 @@ class FedexShipmentTests(TestCase):
         self.assertEqual(response["tracking_number"], "123456789012")
         self.assertEqual(response["labels"][0]["content_base64"], "JVBERi0xLjQ=")
         self.assertEqual(response["warning"], "")
+
+    @override_settings(
+        FEDEX_SHIPMENT_CREATION_ENABLED=True,
+        FEDEX_ACCOUNT_NUMBER="test-account",
+        FEDEX_BASE_URL="https://apis-sandbox.fedex.com",
+        FEDEX_API_KEY="test-key",
+        FEDEX_SECRET_KEY="test-secret",
+    )
+    @patch("integrations.views.FedexClient.create_shipment")
+    @patch("integrations.views.FedexClient.upload_commercial_invoice")
+    def test_us_canada_uploads_invoice_before_creating_and_does_not_store_it(
+        self, upload, create_shipment
+    ):
+        self.payload["sender"]["country_code"] = "US"
+        self.payload["recipient"]["country_code"] = "CA"
+        self.payload["duties_payment_type"] = "SENDER"
+        self.payload["commercial_invoice"] = base64.b64encode(b"%PDF-1.4 example").decode()
+        self.payload["invoice_reviewed"] = True
+        upload.return_value = "document-123"
+        create_shipment.return_value = {
+            "output": {"transactionShipments": [{"pieceResponses": [{
+                "trackingNumber": "123456789012",
+                "packageDocuments": [{"encodedLabel": "JVBERi0xLjQ="}],
+            }]}]}
+        }
+
+        def request():
+            result = APIRequestFactory().post(
+                "/api/integrations/fedex/shipments/", self.payload, format="json", **self.headers
+            )
+            force_authenticate(result, user=self.user)
+            return result
+
+        response = FedexCreateShipmentView.as_view()(request())
+        self.assertEqual(response.status_code, 201)
+        upload.assert_called_once_with(b"%PDF-1.4 example")
+        shipment_request = create_shipment.call_args.args[0]["requestedShipment"]
+        attached = shipment_request["shipmentSpecialServices"]["etdDetail"]["attachedDocuments"]
+        self.assertEqual(attached, [{
+            "documentType": "COMMERCIAL_INVOICE", "documentId": "document-123"
+        }])
+        self.assertNotIn("commercial_invoice", FedexShipment.objects.get().shipment_data)
+        self.assertEqual(FedexCreateShipmentView.as_view()(request()).status_code, 409)
+        upload.assert_called_once()
+        create_shipment.assert_called_once()
+
+    @override_settings(
+        FEDEX_SHIPMENT_CREATION_ENABLED=True,
+        FEDEX_ACCOUNT_NUMBER="test-account",
+        FEDEX_BASE_URL="https://apis-sandbox.fedex.com",
+        FEDEX_API_KEY="test-key",
+        FEDEX_SECRET_KEY="test-secret",
+    )
+    @patch("integrations.views.FedexClient.create_shipment")
+    @patch("integrations.views.FedexClient.upload_commercial_invoice", side_effect=ValueError())
+    def test_invoice_upload_failure_never_creates_shipment(self, upload, create_shipment):
+        self.payload["sender"]["country_code"] = "US"
+        self.payload["recipient"]["country_code"] = "CA"
+        self.payload["duties_payment_type"] = "SENDER"
+        self.payload["commercial_invoice"] = base64.b64encode(b"%PDF-1.4 example").decode()
+        self.payload["invoice_reviewed"] = True
+        request = APIRequestFactory().post(
+            "/api/integrations/fedex/shipments/", self.payload, format="json", **self.headers
+        )
+        force_authenticate(request, user=self.user)
+        response = FedexCreateShipmentView.as_view()(request)
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(FedexShipment.objects.get().status, FedexShipment.Status.FAILED)
+        upload.assert_called_once()
+        create_shipment.assert_not_called()
+
+    @override_settings(
+        FEDEX_SHIPMENT_CREATION_ENABLED=True,
+        FEDEX_ACCOUNT_NUMBER="test-account",
+        FEDEX_BASE_URL="https://apis-sandbox.fedex.com",
+        FEDEX_API_KEY="test-key",
+        FEDEX_SECRET_KEY="test-secret",
+    )
+    @patch("integrations.views.FedexClient.create_shipment")
+    @patch("integrations.views.FedexClient.upload_commercial_invoice")
+    def test_requires_pdf_and_review_before_upload(self, upload, create_shipment):
+        self.payload["sender"]["country_code"] = "US"
+        self.payload["recipient"]["country_code"] = "CA"
+        self.payload["duties_payment_type"] = "SENDER"
+
+        def request():
+            result = APIRequestFactory().post(
+                "/api/integrations/fedex/shipments/", self.payload, format="json", **self.headers
+            )
+            force_authenticate(result, user=self.user)
+            return FedexCreateShipmentView.as_view()(result)
+
+        self.assertEqual(request().status_code, 400)
+        self.payload["commercial_invoice"] = base64.b64encode(b"not a pdf").decode()
+        self.payload["invoice_reviewed"] = True
+        self.assertEqual(request().status_code, 400)
+        self.payload["commercial_invoice"] = base64.b64encode(b"%PDF-1.4 example").decode()
+        self.payload["invoice_reviewed"] = False
+        self.assertEqual(request().status_code, 400)
+        self.assertFalse(FedexShipment.objects.exists())
+        upload.assert_not_called()
+        create_shipment.assert_not_called()
+
+    @override_settings(
+        FEDEX_BASE_URL="https://apis-sandbox.fedex.com",
+        FEDEX_API_KEY="test-key",
+        FEDEX_SECRET_KEY="test-secret",
+    )
+    @patch("integrations.providers.fedex.client.requests.post")
+    @patch.object(FedexClient, "_get_token", return_value="token")
+    def test_upload_invoice_uses_multipart_and_requires_document_id(self, _token, post):
+        post.return_value.json.return_value = {"output": {"meta": {"docId": "doc-1"}}}
+        self.assertEqual(FedexClient().upload_commercial_invoice(b"%PDF-example"), "doc-1")
+        self.assertEqual(post.call_args.args[0],
+                         "https://apis-sandbox.fedex.com/documents/v1/etds/upload")
+        self.assertEqual([item[0] for item in post.call_args.kwargs["files"]],
+                         ["document", "attachment"])
+        post.return_value.json.return_value = {"output": {}}
+        with self.assertRaises(ValueError):
+            FedexClient().upload_commercial_invoice(b"%PDF-example")
 
     @override_settings(
         FEDEX_SHIPMENT_CREATION_ENABLED=True,

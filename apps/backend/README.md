@@ -34,9 +34,24 @@ Both require an active company membership with price-view permission.
 
 Shipment creation remains disabled unless `FEDEX_SHIPMENT_CREATION_ENABLED` is
 explicitly enabled, and the backend independently rejects creation unless
-`FEDEX_BASE_URL` is exactly `https://apis-sandbox.fedex.com`. The initial flow
-accepts only US-to-US shipments with `DROPOFF_AT_FEDEX_LOCATION`; it does not
-schedule a pickup. A CB can have only one active, created, or unresolved FedEx
+`FEDEX_BASE_URL` is exactly `https://apis-sandbox.fedex.com`. The sandbox flow
+accepts US-to-US and US-to-Canada shipments with `DROPOFF_AT_FEDEX_LOCATION`;
+it does not schedule a pickup. US-to-Canada is experimental and requires
+verification in FedEx sandbox, including account access to electronic trade
+documents and the selected service. Operators enter and verify each commodity
+and its unit and total values against the commercial invoice. International
+rate requests include these customs details and changing them invalidates the
+selected estimate. The quote does not upload the invoice or create a shipment.
+
+For US-to-Canada creation, select a commercial invoice PDF (up to 1 MiB) and
+confirm that the entered customs details match it. At creation, the backend
+uploads the PDF to FedEx and associates the returned document ID with the
+shipment; if upload is not confirmed it does not request the shipment. The PDF
+is not stored in GPC, and must be selected again after reloading the page.
+Verify that FedEx associated the document with the shipment. PDF validation
+checks the header and size, not the contents or customs compliance.
+
+A CB can have only one active, created, or unresolved FedEx
 shipment per company. Definite FedEx rejections can be retried; timeouts and
 ambiguous outcomes remain blocked until an authorized company administrator
 verifies them in FedEx and records the resolution. Billing account numbers are

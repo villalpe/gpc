@@ -16,6 +16,13 @@ const labels: Record<string, string> = {
   width: "Ancho",
   height: "Alto",
   dimension_units: "Unidad de dimensiones",
+  customs_items: "Mercancías / datos aduanales",
+  description: "Descripción aduanal",
+  hs_code: "Código HS",
+  origin_country: "País de fabricación",
+  unit_price: "Valor unitario",
+  customs_value: "Valor aduanal total",
+  customs_currency: "Moneda",
 };
 
 export function rateValidationErrors(value: unknown): string[] {

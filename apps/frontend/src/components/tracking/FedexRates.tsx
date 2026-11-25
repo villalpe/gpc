@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { fedexRateQuoteKey, type FedexDraft } from "@/lib/cargobase/fedex";
+import { fedexRateQuoteKey, isInternationalFedexDraft, type FedexDraft } from "@/lib/cargobase/fedex";
 import { rateValidationErrors } from "@/lib/cargobase/fedex-rate-errors";
 import {
   formatRateAmount,
@@ -52,6 +52,7 @@ function requestData(draft: FedexDraft, shipDate: string) {
       width: item.width,
       height: item.height,
       dimension_units: item.dimension_units,
+      ...(isInternationalFedexDraft(draft) ? { customs_items: item.customs_items } : {}),
     })),
   };
 }
@@ -209,6 +210,7 @@ export default function FedexRates({
         Se consulta la tarifa de cuenta para la fecha de envío indicada arriba.
         Puedes añadir hasta cuatro fechas para comparar. Completa origen, destino,
         paquetes, empaque y modalidad antes de consultar.
+        {isInternationalFedexDraft(draft) && " En rutas internacionales completa también los datos aduanales de cada paquete."}
       </p>
       <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
         Son estimaciones; no garantizan disponibilidad ni incluyen necesariamente
